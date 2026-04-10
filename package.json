@@ -1,17 +1,15 @@
-# CallLocally Environment Variables
-# Copy this to .env and fill in your values
-
-# Twilio (get from twilio.com)
-TWILIO_ACCOUNT_SID=your_account_sid
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_PHONE_NUMBER=+1234567890
-
-# SendGrid (get from sendgrid.com)
-SENDGRID_API_KEY=your_sendgrid_api_key
-
-# Email sender
-FROM_EMAIL=hello@calllocally.com
-
-# Server
-PORT=3000
-NODE_ENV=development
+{
+  "name": "calllocally",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "twilio": "^4.19.0",
+    "@sendgrid/mail": "^7.7.0"
+  }
+}
