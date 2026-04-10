@@ -6,7 +6,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // CONFIG - replace with your numbers
-const BUSINESS_PHONE = '+15551234567';  // YOUR REAL PHONE
+const BUSINESS_PHONE = '+16199429500';  // YOUR REAL PHONE
 const TWILIO_PHONE = '+19497968059';    // YOUR TWILIO NUMBER
 
 // Twilio client
