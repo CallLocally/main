@@ -3,15 +3,14 @@ const app = express();
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-console.log('App starting...');
-
 app.post('/api/twilio/missed-call', (req, res) => {
-  console.log('Missed call webhook hit:', req.body);
-  res.status(200).send('OK');
+  console.log('Voice webhook:', req.body);
+  res.set('Content-Type', 'text/xml');
+  res.send('<Response></Response>');
 });
 
 app.post('/api/twilio/sms', (req, res) => {
-  console.log('SMS webhook hit:', req.body);
+  console.log('SMS webhook:', req.body);
   res.status(200).send('OK');
 });
 
