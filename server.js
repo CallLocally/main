@@ -7,6 +7,7 @@ app.use(express.json());
 
 const BUSINESS_PHONE = '+16199429500';
 const TWILIO_PHONE = '+19497968059';
+const RAILWAY_URL = 'https://main-production-147d.up.railway.app';
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -14,13 +15,13 @@ app.get('/api/forward', (req, res) => {
   res.set('Content-Type', 'text/xml');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="15" statusCallback="/api/call-status" statusCallbackEvent="completed,no-answer">${BUSINESS_PHONE}</Dial>
+  <Dial timeout="15" statusCallback="${RAILWAY_URL}/api/call-status" statusCallbackEvent="completed,no-answer">${BUSINESS_PHONE}</Dial>
 </Response>`);
 });
 
 app.post('/api/call-status', async (req, res) => {
   const { CallStatus, DialCallStatus, Caller } = req.body;
-  console.log('Status:', CallStatus, DialCallStatus);
+  console.log('Status:', CallStatus, DialCallStatus, 'Caller:', Caller);
   
   if (DialCallStatus === 'no-answer' && Caller) {
     try {
