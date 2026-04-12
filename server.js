@@ -257,7 +257,7 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     if (!tfAvail.length) throw new Error('No toll-free numbers available');
     const purchased = await twilioClient.incomingPhoneNumbers.create({
       phoneNumber: tfAvail[0].phoneNumber,
-      voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'GET',
+      voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'POST',
       statusCallback: `${RAILWAY_URL}/api/call-status`, statusCallbackMethod: 'POST',
       smsUrl: `${RAILWAY_URL}/api/twilio/sms`, smsMethod: 'POST',
     });
@@ -898,53 +898,6 @@ async function checkTrials() {
 setInterval(checkTrials, 60*60*1000);
 setTimeout(checkTrials, 8000);
 
-
-// ── TFV STATUS POLLER ──
-// Runs hourly — checks pending numbers and emails customer on approval
-async function checkTFVStatus() {
-  try {
-    const { rows } = await pool.query(
-      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND tfv_notified IS NOT TRUE"
-    );
-    if (!rows.length) return;
-    const SID = process.env.TWILIO_ACCOUNT_SID;
-    const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
-    const auth = 'Basic ' + Buffer.from(`${SID}:${TTOKEN}`).toString('base64');
-    for (const user of rows) {
-      try {
-        const encoded = encodeURIComponent(user.twilio_number);
-        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encoded}`, {
-          headers: { 'Authorization': auth }
-        });
-        const d = await r.json();
-        const verification = d.verifications?.[0];
-        if (!verification) continue;
-        const status = verification.status;
-        if (status === 'TWILIO_APPROVED') {
-          console.log(`TFV approved: ${user.twilio_number} → emailing ${user.email}`);
-          await sendVerifiedEmail(user);
-          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-        } else if (status === 'TWILIO_REJECTED') {
-          console.log(`TFV rejected: ${user.twilio_number}`);
-          if (process.env.SENDGRID_API_KEY) {
-            await sgMail.send({
-              to: user.email, from: 'hello@calllocally.com',
-              subject: 'Action needed: your CallLocally number verification',
-              html: `<div style="font-family:sans-serif;max-width:480px">
-                <h2 style="color:#FF5C1A">Verification needs attention</h2>
-                <p>Hey ${user.name}, there was an issue verifying your CallLocally number <b>${user.twilio_number}</b>.</p>
-                <p>Our team will reach out within 1 business day. No action needed from you right now.</p>
-              </div>`
-            }).catch(e => console.error('TFV rejection email:', e.message));
-          }
-          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-        }
-      } catch(e) { console.error(`TFV check error for ${user.twilio_number}:`, e.message); }
-    }
-  } catch(e) { console.error('TFV poller error:', e.message); }
-}
-setInterval(checkTFVStatus, 60*60*1000);
-setTimeout(checkTFVStatus, 15000);
 
 // ── ANALYTICS: Admin overview of all users + funnel ──
 app.get('/api/admin/analytics', async (req, res) => {
