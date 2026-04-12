@@ -65,6 +65,7 @@ async function initDB() {
       after_hours_message TEXT,
       business_hours JSONB,
       timezone TEXT DEFAULT 'America/Los_Angeles',
+      team_phones JSONB DEFAULT '[]',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       trial_ends_at TIMESTAMPTZ,
       plan TEXT,
@@ -72,8 +73,13 @@ async function initDB() {
       paid_through TIMESTAMPTZ,
       stripe_customer_id TEXT,
       stripe_subscription_id TEXT,
-      last_trial_notification INT
+      last_trial_notification INT,
+      total_leads INT DEFAULT 0,
+      total_urgent INT DEFAULT 0
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS team_phones JSONB DEFAULT '[]';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id),
@@ -104,6 +110,37 @@ function formatPhone(raw) {
   const d = raw.replace(/\D/g,'');
   return d.startsWith('1') ? `+${d}` : `+1${d}`;
 }
+// ── TRADE-SPECIFIC MESSAGES ──
+function getTradeMessage(businessName, trade, afterHours = false) {
+  // If contractor has set a custom message, that takes priority (handled at call site)
+  const biz = businessName;
+  const ah = afterHours;
+  const base = {
+    plumbing:    ah ? `Hi! This is ${biz} — we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
+                    : `Hi! This is ${biz} — we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
+    hvac:        ah ? `Hi! This is ${biz} — we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
+    electrical:  ah ? `Hi! This is ${biz} — we're closed. What's the electrical issue and your address? We call back emergencies 24/7 — reply URGENT if needed.`
+                    : `Hi! This is ${biz} — on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
+    roofing:     ah ? `Hi! This is ${biz} — closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} — missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
+    landscaping: ah ? `Hi! This is ${biz} — closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
+                    : `Hi! This is ${biz} — on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
+    pest:        ah ? `Hi! This is ${biz} — closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
+    handyman:    ah ? `Hi! This is ${biz} — closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
+                    : `Hi! This is ${biz} — on a job. What do you need fixed or built, and what's the address?`,
+    painting:    ah ? `Hi! This is ${biz} — closed for the day. What painting project do you have in mind and what's the address?`
+                    : `Hi! This is ${biz} — missed your call. Interior or exterior painting? And what's the address?`,
+    pool:        ah ? `Hi! This is ${biz} — closed right now. What's the pool issue and your address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} — on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
+    general:     ah ? `Hi! This is ${biz} — we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
+  };
+  return base[trade] || base.general;
+}
+
+
 function isActive(user) {
   if (user.paid) return true;
   if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
@@ -323,7 +360,11 @@ app.post('/api/call-status', validateTwilio, async (req, res) => {
   if (!user || !isActive(user)) return res.status(200).send('OK');
 
   const afterHours = !isBusinessHours(user);
-  const message = afterHours ? (user.after_hours_message || user.custom_message) : user.custom_message;
+  // Use custom message if contractor set one, otherwise use trade-specific default
+  const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', afterHours);
+  const message = afterHours
+    ? (user.after_hours_message || defaultMsg)
+    : (user.custom_message || defaultMsg);
 
   try {
     await twilioClient.messages.create({ body: message, from: user.twilio_number, to: Caller });
@@ -331,6 +372,7 @@ app.post('/api/call-status', validateTwilio, async (req, res) => {
       INSERT INTO leads (id, user_id, caller_phone, after_hours)
       VALUES ($1,$2,$3,$4)
     `, [uuidv4(), user.id, Caller, afterHours]);
+    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
   } catch(e) { console.error('SMS error:', e.message); }
   res.status(200).send('OK');
 });
@@ -418,8 +460,16 @@ app.get('/api/admin/users', async (req, res) => {
 async function notifyContractor(user, lead) {
   const flag = lead.urgent ? '🚨 URGENT — ' : '';
   const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service||'See reply'}\nAddress: ${lead.address||'Ask when you call'}${lead.after_hours?' \n⏰ After hours':''}`;
+  // Send to primary number
   try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: user.business_phone }); }
   catch(e) { console.error('Contractor SMS:', e.message); }
+  // Team plan: also send to additional team members
+  if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
+    for (const phone of user.team_phones) {
+      try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: phone }); }
+      catch(e) { console.error('Team SMS error:', e.message); }
+    }
+  }
   if (!process.env.SENDGRID_API_KEY || !user.email) return;
   try {
     await sgMail.send({
@@ -539,6 +589,89 @@ async function checkTrials() {
 }
 setInterval(checkTrials, 60*60*1000);
 setTimeout(checkTrials, 8000);
+
+
+// ── ANALYTICS: Admin overview of all users + funnel ──
+app.get('/api/admin/analytics', async (req, res) => {
+  const adminToken = req.headers['x-admin-token'];
+  if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+
+  const [usersR, leadsR, revenueR] = await Promise.all([
+    pool.query(`
+      SELECT
+        COUNT(*) as total_users,
+        COUNT(*) FILTER (WHERE paid = TRUE) as paid_users,
+        COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at > NOW()) as trial_users,
+        COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at < NOW()) as expired_users,
+        COUNT(*) FILTER (WHERE plan = 'solo') as solo_count,
+        COUNT(*) FILTER (WHERE plan = 'growth') as growth_count,
+        COUNT(*) FILTER (WHERE plan = 'team') as team_count,
+        COUNT(*) FILTER (WHERE trade = 'plumbing') as plumbing,
+        COUNT(*) FILTER (WHERE trade = 'hvac') as hvac,
+        COUNT(*) FILTER (WHERE trade = 'electrical') as electrical,
+        COUNT(*) FILTER (WHERE trade = 'roofing') as roofing,
+        COUNT(*) FILTER (WHERE trade = 'landscaping') as landscaping,
+        COUNT(*) FILTER (WHERE trade = 'pest') as pest,
+        COUNT(*) FILTER (WHERE trade = 'handyman') as handyman,
+        COUNT(*) FILTER (WHERE trade = 'painting') as painting,
+        COUNT(*) FILTER (WHERE trade = 'pool') as pool,
+        COUNT(*) FILTER (WHERE trade = 'general') as other_trade,
+        SUM(total_leads) as total_leads_all_time,
+        SUM(total_urgent) as total_urgent_all_time
+      FROM users
+    `),
+    pool.query(`
+      SELECT
+        COUNT(*) as total_leads,
+        COUNT(*) FILTER (WHERE status = 'captured') as captured,
+        COUNT(*) FILTER (WHERE status = 'waiting') as waiting,
+        COUNT(*) FILTER (WHERE urgent = TRUE) as urgent,
+        COUNT(*) FILTER (WHERE after_hours = TRUE) as after_hours,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as last_7_days,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as last_30_days
+      FROM leads
+    `),
+    pool.query(`
+      SELECT
+        COALESCE(SUM(CASE plan WHEN 'solo' THEN 49 WHEN 'growth' THEN 79 WHEN 'team' THEN 129 ELSE 0 END), 0) as mrr
+      FROM users WHERE paid = TRUE
+    `),
+  ]);
+
+  const users = usersR.rows[0];
+  const leads = leadsR.rows[0];
+  const revenue = revenueR.rows[0];
+
+  res.json({
+    users: {
+      total: parseInt(users.total_users),
+      paid: parseInt(users.paid_users),
+      trial: parseInt(users.trial_users),
+      expired: parseInt(users.expired_users),
+      byPlan: { solo: parseInt(users.solo_count), growth: parseInt(users.growth_count), team: parseInt(users.team_count) },
+      byTrade: {
+        plumbing: parseInt(users.plumbing), hvac: parseInt(users.hvac), electrical: parseInt(users.electrical),
+        roofing: parseInt(users.roofing), landscaping: parseInt(users.landscaping), pest: parseInt(users.pest),
+        handyman: parseInt(users.handyman), painting: parseInt(users.painting), pool: parseInt(users.pool),
+        other: parseInt(users.other_trade),
+      },
+    },
+    leads: {
+      total: parseInt(leads.total_leads),
+      captured: parseInt(leads.captured),
+      waiting: parseInt(leads.waiting),
+      urgent: parseInt(leads.urgent),
+      afterHours: parseInt(leads.after_hours),
+      last7Days: parseInt(leads.last_7_days),
+      last30Days: parseInt(leads.last_30_days),
+    },
+    revenue: {
+      mrr: parseInt(revenue.mrr),
+      arr: parseInt(revenue.mrr) * 12,
+    },
+    generatedAt: new Date().toISOString(),
+  });
+});
 
 // ── STATIC FILES ──
 app.get('/dashboard', (req, res) => {
