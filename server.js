@@ -1,31 +1,4 @@
-html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
-      <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
-      <p style="font-size:16px">Your CallLocally number is reserved:</p>
-      <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
-
-      <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:20px;margin:24px 0">
-        <p style="font-size:15px;font-weight:700;color:#FF5C1A;margin:0 0 8px">⏳ Step 1 of 2: Carrier verification in progress</p>
-        <p style="font-size:14px;color:#555;margin:0;line-height:1.6">
-          Your number is going through a quick carrier verification required by US telecom regulations.
-          This takes <b>1–3 business days</b>. Once approved, your number can send texts to missed callers.<br><br>
-          <b>We'll email you the moment it's verified</b> with your final setup instructions.
-          You don't need to do anything right now.
-        </p>
-      </div>
-
-      <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
-        <p style="font-size:13px;color:#555;margin:0">
-          <b>How it works once verified:</b><br>
-          1. You forward unanswered calls from your phone to your CallLocally number (takes 1 min)<br>
-          2. When a customer calls and you don't answer, they hear a voicemail greeting<br>
-          3. They can leave a voicemail or text back with their service need<br>
-          4. You get notified instantly via SMS and email
-        </p>
-      </div>
-
-      <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard" style="color:#FF5C1A">calllocally.com/dashboard</a></p>
-      <p style="font-size:13px;color:#999">Questions? Reply to this email or reach us at hello@calllocally.com</p>
-    </div>`,// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
+// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
 async function submitTollFreeVerification(user) {
   const TSID = process.env.TWILIO_ACCOUNT_SID;
   const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -743,7 +716,7 @@ async function sendWelcomeEmail(user) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: "You're signed up! Your CallLocally number is being verified.",
+      subject: "You're live on CallLocally — one step left",
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
         <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
         <p style="font-size:16px">Your CallLocally number is ready:</p>
@@ -837,6 +810,74 @@ async function sendTrialEmail(user, daysLeft) {
     await sgMail.send({ to: user.email, from: 'hello@calllocally.com', subject: configs[daysLeft].subject,
       html: `<div style="font-family:sans-serif;max-width:480px">${configs[daysLeft].body}</div>` });
   } catch(e) { console.error('Trial email:', e.message); }
+}
+
+// ── TFV STATUS WEBHOOK + VERIFIED EMAIL ──
+// Twilio hits this when toll-free verification status changes
+app.post('/api/tfv-webhook', async (req, res) => {
+  const { TollfreePhoneNumber, Status } = req.body;
+  res.sendStatus(200); // Always ack immediately
+
+  if (Status !== 'TWILIO_APPROVED') return; // Only care about approvals
+
+  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [TollfreePhoneNumber]);
+  const user = rows[0];
+  if (!user) return;
+
+  console.log(`TFV approved for ${TollfreePhoneNumber} (user: ${user.email})`);
+  await sendVerifiedEmail(user);
+});
+
+async function sendVerifiedEmail(user) {
+  if (!process.env.SENDGRID_API_KEY) return;
+  const num = user.twilio_number;
+  const digits = num.replace('+','').replace(/\D/g,'');
+  const carrier = (user.carrier || 'other').toLowerCase();
+
+  const carrierInstructions = {
+    tmobile: { name: 'T-Mobile', dialCode: `*61*${digits}**18#`, extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this doesn\'t work, call <b>611</b> and say "Set up call forwarding when unanswered to ' + num + '".</p>' },
+    att:     { name: 'AT&T',     dialCode: `*61*${digits}**18#`, extra: '' },
+    verizon: { name: 'Verizon',  dialCode: `*71${digits}`,       extra: '' },
+    other:   { name: 'your carrier', dialCode: `*61*${digits}**18#`, extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this code doesn\'t work, email hello@calllocally.com and we\'ll send you the right one.</p>' }
+  };
+  const ci = carrierInstructions[carrier] || carrierInstructions.other;
+
+  try {
+    await sgMail.send({
+      to: user.email,
+      from: 'hello@calllocally.com',
+      subject: '✅ Your CallLocally number is verified — finish setup in 1 minute',
+      html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
+        <h2 style="color:#FF5C1A">You're verified! Last step 🎉</h2>
+        <p style="font-size:16px">Your CallLocally number is approved and ready to receive texts:</p>
+        <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
+
+        <p style="color:#555;font-size:14px;margin-bottom:20px">Now just forward your unanswered calls to this number. Takes 1 minute. Your phone still rings normally — if you don't pick up, the caller hears a greeting and can leave a voicemail or text.</p>
+
+        <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
+          <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#FF5C1A;margin-bottom:10px">Dial this on your ${ci.name} phone</p>
+          <p style="font-size:32px;font-weight:700;font-family:monospace;color:#1a1a1a;letter-spacing:3px;margin:0">${ci.dialCode}</p>
+          <p style="font-size:13px;color:#888;margin-top:10px">Then press <b>Call</b>. Done.</p>
+          ${ci.extra}
+        </div>
+
+        <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
+          <p style="font-size:13px;color:#555;margin:0">
+            <b>To undo forwarding later:</b> Dial <code>##61#</code> and press Call.<br><br>
+            <b>What happens after setup:</b><br>
+            1. Customer calls your real number → rings you for 18 seconds<br>
+            2. If no answer → they hear your voicemail greeting<br>
+            3. They leave a voicemail or text back<br>
+            4. You get notified instantly via SMS and email
+          </p>
+        </div>
+
+        <a href="https://calllocally.com/dashboard" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
+        <p style="font-size:13px;color:#999;margin-top:16px">Questions? Reply to this email or reach us at hello@calllocally.com</p>
+      </div>`,
+    });
+    console.log(`Verified email sent to ${user.email}`);
+  } catch(e) { console.error('Verified email error:', e.message); }
 }
 
 // ── TRIAL CHECK ──
