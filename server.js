@@ -220,10 +220,8 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     `, [
       userId, authToken, name.slice(0,100), cleanEmail, businessName.slice(0,200),
-      formattedPhone, trade||'general', purchased.phoneNumber, carrier||'other', carrier||'other',
-      null, // will use trade-specific default via getTradeMessage at call time
-      null, // will use trade-specific default via getTradeMessage at call time
-      trialEndsAt, carrier||'other',
+      formattedPhone, trade||'general', purchased.phoneNumber,
+      null, null, trialEndsAt, carrier||'other',
     ]);
 
     await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, carrier: carrier||'other' });
