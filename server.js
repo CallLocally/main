@@ -717,7 +717,7 @@ async function sendWelcomeEmail(user) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: "You're signed up! Your CallLocally number is being verified",
+      subject: "You're live on CallLocally — one step left",
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
         <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
         <p style="font-size:16px">Your CallLocally number is ready:</p>
@@ -826,10 +826,7 @@ app.post('/api/tfv-webhook', async (req, res) => {
   if (!user) return;
 
   console.log(`TFV approved for ${TollfreePhoneNumber} (user: ${user.email})`);
-  const trialEnd = new Date(Date.now() + 14*24*60*60*1000);
-  await pool.query('UPDATE users SET trial_ends_at=$1, tfv_notified=TRUE WHERE id=$2', [trialEnd, user.id]);
-  const freshUser = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
-  await sendVerifiedEmail(freshUser);
+  await sendVerifiedEmail(user);
 });
 
 async function sendVerifiedEmail(user) {
@@ -894,49 +891,21 @@ async function checkTrials() {
       const daysLeft = daysLeftRaw < 0 ? 0 : daysLeftRaw;
       if ([7,1,0].includes(daysLeft) && user.last_trial_notification !== daysLeft) {
         await sendTrialEmail(user, daysLeft);
+        // Also SMS at end of trial
+        if (daysLeft === 0 && user.twilio_number) {
+          try {
+            await twilioClient.messages.create({
+              body: `⏰ Your CallLocally trial has ended. Don't lose your leads — upgrade at calllocally.com/dashboard to keep your number active. Questions? Reply here.`,
+              from: user.twilio_number,
+              to: user.business_phone
+            });
+          } catch(e) { console.error('Trial ended SMS error:', e.message); }
+        }
         await pool.query('UPDATE users SET last_trial_notification=$1 WHERE id=$2', [daysLeft, user.id]);
       }
     }
   } catch(e) { console.error('Trial check error:', e.message); }
 }
-
-// ── TFV STATUS POLLER ──
-// Runs every hour — starts 14-day trial and emails customer when number is approved
-async function checkTFVStatus() {
-  try {
-    const { rows } = await pool.query(
-      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL) AND paid = FALSE"
-    );
-    if (!rows.length) return;
-    const auth = 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
-    for (const user of rows) {
-      try {
-        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encodeURIComponent(user.twilio_number)}`, { headers: { 'Authorization': auth } });
-        const d = await r.json();
-        const v = d.verifications?.[0];
-        if (!v) continue;
-        if (v.status === 'TWILIO_APPROVED') {
-          console.log(`TFV approved via poller: ${user.twilio_number} — starting trial for ${user.email}`);
-          const trialEnd = new Date(Date.now() + 14*24*60*60*1000);
-          await pool.query('UPDATE users SET tfv_notified=TRUE, trial_ends_at=$2 WHERE id=$1', [user.id, trialEnd]);
-          const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
-          await sendVerifiedEmail(fresh);
-        } else if (v.status === 'TWILIO_REJECTED') {
-          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-          if (process.env.SENDGRID_API_KEY) {
-            await sgMail.send({ to: user.email, from: 'hello@calllocally.com',
-              subject: 'Action needed: your CallLocally number verification',
-              html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>`
-            }).catch(e => console.error('Rejection email:', e.message));
-          }
-        }
-      } catch(e) { console.error(`TFV check error ${user.twilio_number}:`, e.message); }
-    }
-  } catch(e) { console.error('TFV poller error:', e.message); }
-}
-setInterval(checkTFVStatus, 60 * 60 * 1000);
-setTimeout(checkTFVStatus, 15000); // run 15s after startup
-
 setInterval(checkTrials, 60*60*1000);
 setTimeout(checkTrials, 8000);
 
