@@ -461,6 +461,12 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
 
 // ── CALL FORWARDING ──
 app.get('/api/forward', async (req, res) => {
+  // Only handle genuine inbound calls — reject retries/outbound legs to prevent infinite loop
+  const direction = req.query.Direction || req.body?.Direction || '';
+  if (direction && direction !== 'inbound') {
+    res.set('Content-Type', 'text/xml');
+    return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
+  }
   const calledNum = req.query.To || req.body?.To;
   const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
   const user = rows[0];
