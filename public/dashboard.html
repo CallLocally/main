@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CallLocally — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--orange:#FF5C1A;--orange-dark:#D94B12;--dark:#0C0F13;--dark-2:#13171D;--dark-3:#1A1F27;--dark-4:#212730;--white:#fff;--text:#E2DFD8;--muted:#7A8090;--border:rgba(255,255,255,0.07);--green:#22C55E;--font-d:'Barlow Condensed',sans-serif;--font-b:'DM Sans',sans-serif;--r:10px;--r-lg:16px}
+html,body{height:100%}
+body{font-family:var(--font-b);background:var(--dark);color:var(--text);-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+@media(max-width:768px){.app{grid-template-columns:1fr}}
+.sidebar{background:var(--dark-2);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+@media(max-width:768px){.sidebar{display:none}}
+.sidebar-logo{display:flex;align-items:center;gap:9px;padding:0 20px 24px;border-bottom:1px solid var(--border);text-decoration:none}
+.sidebar-logo-text{font-family:var(--font-d);font-size:20px;font-weight:800;color:var(--white)}
+.sidebar-nav{padding:16px 12px;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r);font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;transition:all 0.15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.05)}
+.nav-item.active{color:var(--white);background:rgba(255,92,26,0.12)}
+.sidebar-bottom{padding:16px 12px;border-top:1px solid var(--border)}
+.trial-box{background:rgba(255,92,26,0.08);border:1px solid rgba(255,92,26,0.2);border-radius:var(--r);padding:12px}
+.trial-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);margin-bottom:4px}
+.trial-days{font-size:28px;font-weight:800;color:var(--white);font-family:var(--font-d);line-height:1}
+.trial-sub{font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:10px}
+.upgrade-btn{display:block;background:var(--orange);color:white;text-align:center;padding:8px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;width:100%;font-family:var(--font-b)}
+.upgrade-btn:hover{background:var(--orange-dark)}
+.main{overflow-y:auto}
+.topbar{background:var(--dark-2);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:16px;font-weight:600;color:var(--white)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.topbar-num{background:var(--dark-3);border:1px solid var(--border);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--muted)}
+.topbar-num b{color:var(--text)}
+.logout-btn{background:none;border:1px solid var(--border);border-radius:var(--r);padding:7px 14px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
+.logout-btn:hover{color:var(--text)}
+.content{padding:28px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.stat-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px}
+.stat-val{font-family:var(--font-d);font-size:40px;font-weight:800;color:var(--white);line-height:1}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.stat-urgent .stat-val{color:var(--orange)}
+.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sec-title{font-size:16px;font-weight:600;color:var(--white)}
+.filter-tabs{display:flex;gap:4px}
+.filter-tab{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
+.filter-tab.active{background:rgba(255,92,26,0.12);border-color:rgba(255,92,26,0.3);color:var(--orange)}
+.leads-wrap{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{padding:11px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);background:var(--dark-3);border-bottom:1px solid var(--border)}
+td{padding:14px 16px;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-urgent{background:rgba(255,92,26,0.15);color:var(--orange)}
+.badge-waiting{background:rgba(122,128,144,0.15);color:var(--muted)}
+.badge-captured{background:rgba(34,197,94,0.12);color:var(--green)}
+.phone-link{color:var(--orange);text-decoration:none;font-weight:500}
+.empty-state{text-align:center;padding:48px 20px}
+.empty-icon{font-size:36px;margin-bottom:12px}
+.empty-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+.empty-sub{font-size:14px;color:var(--muted)}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:640px){.settings-grid{grid-template-columns:1fr}}
+.settings-card{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px}
+.settings-card h3{font-size:15px;font-weight:600;color:var(--white);margin-bottom:16px}
+.field-group{margin-bottom:14px}
+.field-label{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;display:block}
+.field-input,.field-textarea{width:100%;background:var(--dark-3);border:1px solid rgba(255,255,255,0.1);border-radius:var(--r);padding:10px 13px;font-size:14px;color:var(--white);font-family:var(--font-b);outline:none}
+.field-input:focus,.field-textarea:focus{border-color:rgba(255,92,26,0.5)}
+.field-input[readonly]{opacity:0.6;cursor:default}
+.field-textarea{resize:vertical;min-height:80px;line-height:1.5}
+.copy-row{display:flex;gap:8px}
+.copy-row .field-input{flex:1}
+.copy-btn{background:var(--dark-4);border:1px solid rgba(255,255,255,0.1);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
+.save-btn{background:var(--orange);color:white;border:none;border-radius:var(--r);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-b);margin-top:6px}
+.save-success{display:none;font-size:13px;color:var(--green);margin-top:8px}
+.view{display:none}
+.view.active{display:block}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--dark);padding:20px}
+.login-card{background:var(--dark-2);border:1px solid var(--border);border-radius:20px;padding:40px 36px;width:100%;max-width:400px}
+.login-logo{display:flex;align-items:center;gap:9px;margin-bottom:28px;justify-content:center}
+.login-logo-text{font-family:var(--font-d);font-size:22px;font-weight:800;color:var(--white)}
+.login-card h2{font-size:22px;font-weight:600;color:var(--white);margin-bottom:6px;text-align:center}
+.login-card p{font-size:14px;color:var(--muted);text-align:center;margin-bottom:28px}
+.login-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:var(--r);padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:14px;display:none}
+.login-error.show{display:block}
+.login-btn{width:100%;background:var(--orange);color:white;border:none;border-radius:var(--r);padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font-b)}
+.login-note{font-size:13px;color:var(--muted);text-align:center;margin-top:16px}
+.login-note a{color:var(--orange);text-decoration:none}
+.spinner{width:32px;height:32px;border:3px solid rgba(255,92,26,0.2);border-top-color:var(--orange);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg width="34" height="34" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/><path d="M26 15H27C28.1 15 29 15.9 29 17V22C29 23.1 28.1 24 27 24H25.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="login-logo-text">CallLocally</span>
+    </div>
+    <h2>Welcome back</h2>
+    <p>Enter your email and user ID to access your dashboard</p>
+    <div class="login-error" id="loginError"></div>
+    <div class="field-group"><label class="field-label">Email address</label><input class="field-input" id="login-email" type="email" placeholder="mike@mikesplumbing.com"></div>
+    <div class="field-group"><label class="field-label">User ID <span style="font-weight:400;color:var(--muted)">(from your welcome email)</span></label><input class="field-input" id="login-userid" type="text" placeholder="user_1234567890"></div>
+    <button class="login-btn" onclick="handleLogin()">Sign In →</button>
+    <p class="login-note">New here? <a href="/">Start your free trial</a></p>
+  </div>
+</div>
+
+<div class="app" id="appWrap" style="display:none">
+  <aside class="sidebar">
+    <a href="/" class="sidebar-logo">
+      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
+      <span class="sidebar-logo-text">CallLocally</span>
+    </a>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-leads" onclick="switchView('leads')">📋 &nbsp;Leads</button>
+      <button class="nav-item" id="nav-settings" onclick="switchView('settings')">⚙️ &nbsp;Settings</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="trial-box">
+        <div class="trial-label">Free Trial</div>
+        <div class="trial-days" id="trialDays">14</div>
+        <div class="trial-sub">days remaining</div>
+        <button class="upgrade-btn" onclick="alert('Stripe coming soon!')">Upgrade Plan</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topbarTitle">Leads</span>
+      <div class="topbar-right">
+        <div class="topbar-num">Your number: <b id="topbarNum">—</b></div>
+        <button class="logout-btn" onclick="handleLogout()">Sign out</button>
+      </div>
+    </div>
+    <div class="content">
+
+      <div class="view active" id="view-leads">
+        <div class="stats">
+          <div class="stat"><div class="stat-label">Total leads</div><div class="stat-val" id="statTotal">—</div><div class="stat-sub">all time</div></div>
+          <div class="stat stat-urgent"><div class="stat-label">Urgent</div><div class="stat-val" id="statUrgent">—</div><div class="stat-sub">emergency flagged</div></div>
+          <div class="stat"><div class="stat-label">Captured</div><div class="stat-val" id="statCaptured">—</div><div class="stat-sub">details collected</div></div>
+          <div class="stat"><div class="stat-label">This week</div><div class="stat-val" id="statWeek">—</div><div class="stat-sub">last 7 days</div></div>
+        </div>
+        <div class="sec-header">
+          <span class="sec-title">Recent leads</span>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterLeads('all',this)">All</button>
+            <button class="filter-tab" onclick="filterLeads('urgent',this)">Urgent</button>
+            <button class="filter-tab" onclick="filterLeads('captured',this)">Captured</button>
+          </div>
+        </div>
+        <div class="leads-wrap">
+          <div id="leadsLoading" style="text-align:center;padding:40px"><div class="spinner"></div></div>
+          <table id="leadsTable" style="display:none">
+            <thead><tr><th>Time</th><th>Caller</th><th>Service</th><th>Address</th><th>Status</th></tr></thead>
+            <tbody id="leadsBody"></tbody>
+          </table>
+          <div class="empty-state" id="leadsEmpty" style="display:none">
+            <div class="empty-icon">📭</div>
+            <div class="empty-title">No leads yet</div>
+            <div class="empty-sub">Forward your unanswered calls to your CallLocally number and your first lead will show up here.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" id="view-settings">
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>Your CallLocally number</h3>
+            <div class="field-group"><label class="field-label">Forward unanswered calls to</label>
+              <div class="copy-row"><input class="field-input" id="set-twilio" readonly><button class="copy-btn" onclick="copyNum()">Copy</button></div>
+            </div>
+            <div style="background:rgba(255,92,26,0.07);border:1px solid rgba(255,92,26,0.18);border-radius:var(--r);padding:12px;font-size:13px;color:var(--text);line-height:1.6;margin-top:4px">
+              <b style="color:var(--orange)">iPhone:</b> Settings → Phone → Call Forwarding → On → enter number above<br><br>
+              <b style="color:var(--orange)">Android:</b> Phone → ⋮ → Settings → Supplementary services → Forward when unanswered
+            </div>
+          </div>
+          <div class="settings-card">
+            <h3>Account info</h3>
+            <div class="field-group"><label class="field-label">Business name</label><input class="field-input" id="set-bizname" readonly></div>
+            <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="set-email" readonly></div>
+            <div class="field-group"><label class="field-label">Trade</label><input class="field-input" id="set-trade" readonly></div>
+          </div>
+          <div class="settings-card" style="grid-column:span 2">
+            <h3>Auto-reply message</h3>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">The first text your callers receive when they're missed.</p>
+            <div class="field-group"><label class="field-label">Message <span id="charCount" style="font-weight:400;color:var(--muted)"></span></label>
+              <textarea class="field-textarea" id="set-message" maxlength="320" oninput="updateCharCount()" rows="3"></textarea>
+            </div>
+            <button class="save-btn" onclick="saveMessage()">Save message</button>
+            <div class="save-success" id="saveSuccess">✓ Saved</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'https://main-production-147d.up.railway.app';
+let currentUser = null, allLeads = [];
+
+function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const userId = document.getElementById('login-userid').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.classList.remove('show');
+  if (!email || !userId) { errEl.textContent = 'Please enter your email and user ID.'; errEl.classList.add('show'); return; }
+  sessionStorage.setItem('cl_userId', userId);
+  loadDashboard(userId);
+}
+
+function handleLogout() {
+  sessionStorage.clear(); currentUser = null; allLeads = [];
+  document.getElementById('appWrap').style.display = 'none';
+  document.getElementById('loginWrap').style.display = 'flex';
+}
+
+async function loadDashboard(userId) {
+  try {
+    const [userRes, leadsRes] = await Promise.all([
+      fetch(API + '/api/user/' + userId),
+      fetch(API + '/api/leads?userId=' + userId)
+    ]);
+    if (!userRes.ok) {
+      const errEl = document.getElementById('loginError');
+      errEl.textContent = 'User not found. Check your user ID.'; errEl.classList.add('show'); return;
+    }
+    currentUser = await userRes.json();
+    allLeads = await leadsRes.json();
+    document.getElementById('loginWrap').style.display = 'none';
+    document.getElementById('appWrap').style.display = 'grid';
+    document.getElementById('topbarNum').textContent = fmt(currentUser.twilioNumber);
+    populateStats(); populateLeads(allLeads); populateSettings(); updateTrialDays();
+  } catch(e) {
+    const errEl = document.getElementById('loginError');
+    errEl.textContent = 'Network error. Please try again.'; errEl.classList.add('show');
+  }
+}
+
+function populateStats() {
+  const now = Date.now(), week = 7*24*60*60*1000;
+  document.getElementById('statTotal').textContent = allLeads.length;
+  document.getElementById('statUrgent').textContent = allLeads.filter(l=>l.urgent).length;
+  document.getElementById('statCaptured').textContent = allLeads.filter(l=>l.status==='captured').length;
+  document.getElementById('statWeek').textContent = allLeads.filter(l=>new Date(l.createdAt)>now-week).length;
+}
+
+function populateLeads(leads) {
+  document.getElementById('leadsLoading').style.display = 'none';
+  if (!leads.length) { document.getElementById('leadsEmpty').style.display='block'; document.getElementById('leadsTable').style.display='none'; return; }
+  document.getElementById('leadsEmpty').style.display='none'; document.getElementById('leadsTable').style.display='table';
+  document.getElementById('leadsBody').innerHTML = leads.map(l => {
+    const d = new Date(l.createdAt);
+    const badge = l.urgent ? '<span class="badge badge-urgent">🚨 Urgent</span>' : l.status==='captured' ? '<span class="badge badge-captured">✓ Captured</span>' : '<span class="badge badge-waiting">Waiting</span>';
+    return `<tr><td style="color:var(--muted)">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})} <b style="color:var(--text)">${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</b></td><td><a href="tel:${l.callerPhone}" class="phone-link">${fmt(l.callerPhone)}</a></td><td>${l.service||'<span style="color:var(--muted)">—</span>'}</td><td>${l.address||'<span style="color:var(--muted)">—</span>'}</td><td>${badge}</td></tr>`;
+  }).join('');
+}
+
+function filterLeads(type, btn) {
+  document.querySelectorAll('.filter-tab').forEach(t=>t.classList.remove('active')); btn.classList.add('active');
+  populateLeads(type==='all'?allLeads:type==='urgent'?allLeads.filter(l=>l.urgent):allLeads.filter(l=>l.status===type));
+}
+
+function populateSettings() {
+  document.getElementById('set-twilio').value = currentUser.twilioNumber||'';
+  document.getElementById('set-bizname').value = currentUser.businessName||'';
+  document.getElementById('set-email').value = currentUser.email||'';
+  document.getElementById('set-trade').value = (currentUser.trade||'').charAt(0).toUpperCase()+(currentUser.trade||'').slice(1);
+  document.getElementById('set-message').value = currentUser.customMessage||'';
+  updateCharCount();
+}
+
+function updateTrialDays() {
+  if (!currentUser.trialEndsAt) return;
+  document.getElementById('trialDays').textContent = Math.max(0, Math.ceil((new Date(currentUser.trialEndsAt)-Date.now())/86400000));
+}
+
+async function saveMessage() {
+  const msg = document.getElementById('set-message').value.trim();
+  if (!msg) return;
+  await fetch(API+'/api/user/'+currentUser.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({customMessage:msg}) });
+  const el = document.getElementById('saveSuccess'); el.style.display='block'; setTimeout(()=>el.style.display='none',2500);
+}
+
+function copyNum() {
+  navigator.clipboard.writeText(document.getElementById('set-twilio').value);
+  const btn = document.querySelector('.copy-btn'); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1800);
+}
+
+function updateCharCount() { document.getElementById('charCount').textContent = document.getElementById('set-message').value.length+'/320'; }
+
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  document.getElementById('topbarTitle').textContent = name.charAt(0).toUpperCase()+name.slice(1);
+}
+
+function fmt(num) {
+  if (!num) return '—';
+  const d = (num||'').replace(/\D/g,'');
+  if (d.length===11) return '('+d.slice(1,4)+') '+d.slice(4,7)+'-'+d.slice(7);
+  if (d.length===10) return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+  return num;
+}
+
+document.addEventListener('keydown', e => { if (e.key==='Enter' && document.getElementById('loginWrap').style.display!=='none') handleLogin(); });
+const savedId = sessionStorage.getItem('cl_userId');
+if (savedId) loadDashboard(savedId);
+</script>
+</body>
+</html>
