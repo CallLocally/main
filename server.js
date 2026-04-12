@@ -219,8 +219,8 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     `, [
       userId, authToken, name.slice(0,100), cleanEmail, businessName.slice(0,200),
       formattedPhone, trade||'general', purchased.phoneNumber,
-      `Hi! This is ${businessName} — sorry we missed your call. What service do you need, and what's the address?`,
-      `Hi! This is ${businessName} — we're currently closed. Leave your service need and address and we'll call first thing in the morning.`,
+      null, // will use trade-specific default via getTradeMessage at call time
+      null, // will use trade-specific default via getTradeMessage at call time
       trialEndsAt,
     ]);
 
@@ -429,17 +429,20 @@ app.get('/api/user/:userId', requireAuth, async (req, res) => {
 });
 
 app.patch('/api/user/:userId', requireAuth, async (req, res) => {
-  const { customMessage, afterHoursMessage, businessHours, timezone } = req.body;
+  const { customMessage, afterHoursMessage, businessHours, timezone, teamPhones } = req.body;
   await pool.query(`
     UPDATE users SET
       custom_message = COALESCE($1, custom_message),
       after_hours_message = COALESCE($2, after_hours_message),
       business_hours = COALESCE($3, business_hours),
-      timezone = COALESCE($4, timezone)
-    WHERE id=$5
+      timezone = COALESCE($4, timezone),
+      team_phones = COALESCE($5, team_phones)
+    WHERE id=$6
   `, [customMessage||null, afterHoursMessage||null,
       businessHours?JSON.stringify(businessHours):null,
-      timezone||null, req.params.userId]);
+      timezone||null,
+      teamPhones?JSON.stringify(teamPhones):null,
+      req.params.userId]);
   res.json({ success: true });
 });
 
