@@ -225,8 +225,6 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     ]);
 
     await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, carrier: carrier||'other' });
-    // Auto-submit toll-free verification — fire and forget, don't block signup
-    submitTollFreeVerification({ name, email: cleanEmail, businessName, business_name: businessName, twilioNumber: purchased.phoneNumber }).catch(e => console.error('TFV async error:', e.message));
     console.log(`Signup: ${businessName} → ${purchased.phoneNumber}`);
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
   } catch(err) {
@@ -567,60 +565,6 @@ async function notifyContractor(user, lead) {
     });
   } catch(e) { console.error('Email:', e.message); }
 }
-
-// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
-async function submitTollFreeVerification(user) {
-  const SID = process.env.TWILIO_ACCOUNT_SID;
-  const TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  const num = user.twilioNumber;
-  const nameParts = (user.name || 'Owner').trim().split(' ');
-  const firstName = nameParts[0] || 'Owner';
-  const lastName = nameParts.slice(1).join(' ') || 'Owner';
-
-  const body = new URLSearchParams({
-    TollfreePhoneNumber: num,
-    NotificationEmail: user.email,
-    BusinessName: user.businessName || user.business_name,
-    BusinessWebsite: 'https://calllocally.com',
-    BusinessStreetAddress: '1234 Main St',
-    BusinessStreetAddress2: '',
-    BusinessCity: 'Los Angeles',
-    BusinessStateProvinceRegion: 'CA',
-    BusinessPostalCode: '90001',
-    BusinessCountry: 'US',
-    BusinessContactFirstName: firstName,
-    BusinessContactLastName: lastName,
-    BusinessContactEmail: user.email,
-    BusinessContactPhone: user.twilioNumber,
-    UseCaseCategories: 'NOTIFICATIONS_ALERTS',
-    UseCaseSummary: `CallLocally sends automated SMS messages to missed callers on behalf of ${user.businessName || user.business_name}, a home service contractor. When a customer calls and the contractor doesn't answer, CallLocally texts the customer to capture their service need and address. The contractor receives lead details via SMS and email. No marketing messages are sent.`,
-    ProductionMessageSample: `Hi! This is ${user.businessName || user.business_name} — missed your call. What service do you need and what's your address?`,
-    OptInType: 'VERBAL',
-    OptInImageUrls: 'https://calllocally.com',
-    MessageVolume: '10',
-    AdditionalInformation: 'Automated lead capture for home service contractors. Callers opt in by calling the business phone number.',
-  });
-
-  try {
-    const r = await fetch('https://messaging.twilio.com/v1/Tollfree/Verifications', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(`${SID}:${TOKEN}`).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
-    const d = await r.json();
-    if (d.sid) {
-      console.log(`TFV submitted for ${num}: ${d.sid} status=${d.status}`);
-    } else {
-      console.error(`TFV failed for ${num}:`, JSON.stringify(d));
-    }
-  } catch(e) {
-    console.error('TFV submission error:', e.message);
-  }
-}
-
 async function sendWelcomeEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   const num = user.twilioNumber;
