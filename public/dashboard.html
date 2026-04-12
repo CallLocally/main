@@ -3,132 +3,162 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CallLocally — Dashboard</title>
+<title>CallLocally Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--orange:#FF5C1A;--orange-dark:#D94B12;--dark:#0C0F13;--dark-2:#13171D;--dark-3:#1A1F27;--dark-4:#212730;--white:#fff;--text:#E2DFD8;--muted:#7A8090;--border:rgba(255,255,255,0.07);--green:#22C55E;--font-d:'Barlow Condensed',sans-serif;--font-b:'DM Sans',sans-serif;--r:10px;--r-lg:16px}
-html,body{height:100%}
-body{font-family:var(--font-b);background:var(--dark);color:var(--text);-webkit-font-smoothing:antialiased}
-.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-@media(max-width:768px){.app{grid-template-columns:1fr}}
-.sidebar{background:var(--dark-2);border-right:1px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-@media(max-width:768px){.sidebar{display:none}}
-.sidebar-logo{display:flex;align-items:center;gap:9px;padding:0 20px 24px;border-bottom:1px solid var(--border);text-decoration:none}
-.sidebar-logo-text{font-family:var(--font-d);font-size:20px;font-weight:800;color:var(--white)}
-.sidebar-nav{padding:16px 12px;flex:1}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r);font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;transition:all 0.15s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
-.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.05)}
-.nav-item.active{color:var(--white);background:rgba(255,92,26,0.12)}
-.sidebar-bottom{padding:16px 12px;border-top:1px solid var(--border)}
-.trial-box{background:rgba(255,92,26,0.08);border:1px solid rgba(255,92,26,0.2);border-radius:var(--r);padding:12px}
-.trial-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);margin-bottom:4px}
-.trial-days{font-size:28px;font-weight:800;color:var(--white);font-family:var(--font-d);line-height:1}
-.trial-sub{font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:10px}
-.upgrade-btn{display:block;background:var(--orange);color:white;text-align:center;padding:8px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;width:100%;font-family:var(--font-b)}
+:root{
+  --orange:#FF5C1A;--orange-dark:#D94B12;
+  --bg:#0C0F13;--bg2:#13171D;--bg3:#1A1F27;
+  --white:#fff;--text:#E2DFD8;--muted:#7A8090;
+  --border:rgba(255,255,255,0.08);
+  --font:'DM Sans',sans-serif;--font-d:'Barlow Condensed',sans-serif;
+  --sidebar:240px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+.layout{display:flex;height:100vh}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-logo{padding:20px 20px 16px;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--border)}
+.logo-text{font-family:var(--font-d);font-size:20px;font-weight:800;color:var(--white)}
+.sidebar-nav{padding:12px 8px;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;color:var(--muted);transition:all 0.15s;margin-bottom:2px}
+.nav-item:hover{background:rgba(255,255,255,0.04);color:var(--text)}
+.nav-item.active{background:rgba(255,92,26,0.12);color:var(--orange)}
+.nav-icon{font-size:16px;width:20px;text-align:center}
+.sidebar-bottom{padding:16px;border-top:1px solid var(--border)}
+.trial-box{background:rgba(255,92,26,0.08);border:1px solid rgba(255,92,26,0.2);border-radius:10px;padding:14px;text-align:center}
+.trial-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.trial-days{font-family:var(--font-d);font-size:36px;font-weight:800;color:var(--orange);line-height:1}
+.trial-sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.upgrade-btn{width:100%;padding:9px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)}
 .upgrade-btn:hover{background:var(--orange-dark)}
-.main{overflow-y:auto}
-.topbar{background:var(--dark-2);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:0 24px;height:56px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .topbar-title{font-size:16px;font-weight:600;color:var(--white)}
 .topbar-right{display:flex;align-items:center;gap:12px}
-.topbar-num{background:var(--dark-3);border:1px solid var(--border);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--muted)}
-.topbar-num b{color:var(--text)}
-.logout-btn{background:none;border:1px solid var(--border);border-radius:var(--r);padding:7px 14px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
-.logout-btn:hover{color:var(--text)}
-.content{padding:28px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
-@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
-.stat{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px}
-.stat-label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px}
-.stat-val{font-family:var(--font-d);font-size:40px;font-weight:800;color:var(--white);line-height:1}
-.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.stat-urgent .stat-val{color:var(--orange)}
-.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.sec-title{font-size:16px;font-weight:600;color:var(--white)}
-.filter-tabs{display:flex;gap:4px}
-.filter-tab{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
-.filter-tab.active{background:rgba(255,92,26,0.12);border-color:rgba(255,92,26,0.3);color:var(--orange)}
-.leads-wrap{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
-table{width:100%;border-collapse:collapse}
-th{padding:11px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);background:var(--dark-3);border-bottom:1px solid var(--border)}
-td{padding:14px 16px;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,0.02)}
-.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-urgent{background:rgba(255,92,26,0.15);color:var(--orange)}
-.badge-waiting{background:rgba(122,128,144,0.15);color:var(--muted)}
-.badge-captured{background:rgba(34,197,94,0.12);color:var(--green)}
-.phone-link{color:var(--orange);text-decoration:none;font-weight:500}
-.empty-state{text-align:center;padding:48px 20px}
-.empty-icon{font-size:36px;margin-bottom:12px}
-.empty-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
-.empty-sub{font-size:14px;color:var(--muted)}
-.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-@media(max-width:640px){.settings-grid{grid-template-columns:1fr}}
-.settings-card{background:var(--dark-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px}
-.settings-card h3{font-size:15px;font-weight:600;color:var(--white);margin-bottom:16px}
-.field-group{margin-bottom:14px}
-.field-label{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;display:block}
-.field-input,.field-textarea{width:100%;background:var(--dark-3);border:1px solid rgba(255,255,255,0.1);border-radius:var(--r);padding:10px 13px;font-size:14px;color:var(--white);font-family:var(--font-b);outline:none}
-.field-input:focus,.field-textarea:focus{border-color:rgba(255,92,26,0.5)}
-.field-input[readonly]{opacity:0.6;cursor:default}
-.field-textarea{resize:vertical;min-height:80px;line-height:1.5}
-.copy-row{display:flex;gap:8px}
-.copy-row .field-input{flex:1}
-.copy-btn{background:var(--dark-4);border:1px solid rgba(255,255,255,0.1);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b)}
-.save-btn{background:var(--orange);color:white;border:none;border-radius:var(--r);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-b);margin-top:6px}
-.save-success{display:none;font-size:13px;color:var(--green);margin-top:8px}
-.view{display:none}
-.view.active{display:block}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--dark);padding:20px}
-.login-card{background:var(--dark-2);border:1px solid var(--border);border-radius:20px;padding:40px 36px;width:100%;max-width:400px}
-.login-logo{display:flex;align-items:center;gap:9px;margin-bottom:28px;justify-content:center}
-.login-logo-text{font-family:var(--font-d);font-size:22px;font-weight:800;color:var(--white)}
-.login-card h2{font-size:22px;font-weight:600;color:var(--white);margin-bottom:6px;text-align:center}
-.login-card p{font-size:14px;color:var(--muted);text-align:center;margin-bottom:28px}
-.login-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:var(--r);padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:14px;display:none}
-.login-error.show{display:block}
-.login-btn{width:100%;background:var(--orange);color:white;border:none;border-radius:var(--r);padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font-b)}
-.login-note{font-size:13px;color:var(--muted);text-align:center;margin-top:16px}
-.login-note a{color:var(--orange);text-decoration:none}
-.spinner{width:32px;height:32px;border:3px solid rgba(255,92,26,0.2);border-top-color:var(--orange);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto}
-@keyframes spin{to{transform:rotate(360deg)}}
+.user-badge{font-size:13px;color:var(--muted)}
+.number-badge{font-size:12px;background:rgba(255,92,26,0.12);color:var(--orange);border:1px solid rgba(255,92,26,0.25);padding:3px 10px;border-radius:20px;font-family:monospace}
+.page{flex:1;overflow-y:auto;padding:24px}
+
+/* STATS ROW */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
+.stat-label{font-size:12px;color:var(--muted);margin-bottom:6px}
+.stat-val{font-size:28px;font-weight:700;font-family:var(--font-d);color:var(--white)}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+/* LEADS TABLE */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+.card-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:15px;font-weight:600;color:var(--white)}
+.leads-table{width:100%;border-collapse:collapse}
+.leads-table th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;padding:12px 20px;border-bottom:1px solid var(--border)}
+.leads-table td{padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:14px;color:var(--text)}
+.leads-table tr:last-child td{border-bottom:none}
+.leads-table tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-urgent{background:rgba(220,38,38,0.15);color:#FCA5A5}
+.badge-captured{background:rgba(34,197,94,0.12);color:#86EFAC}
+.badge-waiting{background:rgba(234,179,8,0.12);color:#FDE047}
+.empty-state{padding:48px;text-align:center;color:var(--muted);font-size:14px}
+
+/* SETTINGS */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.settings-grid{grid-template-columns:1fr}}
+.setting-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px}
+.setting-label{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+.setting-desc{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+.form-input,.form-textarea,.form-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--white);font-family:var(--font);outline:none;transition:border-color 0.15s}
+.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:rgba(255,92,26,0.4)}
+.form-textarea{min-height:80px;resize:vertical;line-height:1.5}
+.form-select option{background:var(--bg3)}
+.save-btn{padding:9px 20px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background 0.15s}
+.save-btn:hover{background:var(--orange-dark)}
+.save-btn:disabled{opacity:0.5;cursor:not-allowed}
+.save-status{font-size:12px;margin-left:10px;opacity:0}
+.save-status.show{opacity:1}
+.save-status.ok{color:#86EFAC}
+.save-status.err{color:#FCA5A5}
+
+/* TEAM PHONES */
+.team-phone-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.team-phone-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;color:var(--white);font-family:monospace;outline:none}
+.team-phone-input:focus{border-color:rgba(255,92,26,0.4)}
+.remove-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:6px 10px;font-size:13px;transition:all 0.15s}
+.remove-btn:hover{border-color:rgba(220,38,38,0.4);color:#FCA5A5}
+.add-phone-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;padding:8px 14px;font-size:13px;transition:all 0.15s;width:100%;margin-top:4px}
+.add-phone-btn:hover{border-color:rgba(255,92,26,0.3);color:var(--orange)}
+.plan-gate{background:rgba(255,92,26,0.06);border:1px solid rgba(255,92,26,0.15);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);text-align:center}
+
+/* HOURS */
+.hours-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.toggle{position:relative;width:36px;height:20px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--border);border-radius:20px;cursor:pointer;transition:0.2s}
+.toggle input:checked + .toggle-slider{background:var(--orange);border-color:var(--orange)}
+.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;left:2px;top:2px;background:white;border-radius:50%;transition:0.2s}
+.toggle input:checked + .toggle-slider:before{transform:translateX(16px)}
+.toggle-label{font-size:13px;color:var(--text)}
+
+/* LOGIN */
+.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg)}
+.login-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px;width:100%;max-width:400px}
+.login-logo{display:flex;align-items:center;gap:9px;margin-bottom:24px}
+.login-h{font-family:var(--font-d);font-size:26px;font-weight:800;color:var(--white);margin-bottom:6px}
+.login-sub{font-size:14px;color:var(--muted);margin-bottom:24px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
+.login-btn{width:100%;padding:12px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);margin-top:4px}
+.login-btn:hover{background:var(--orange-dark)}
+.login-err{background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:14px;display:none}
 </style>
 </head>
 <body>
 
-<div class="login-wrap" id="loginWrap">
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" class="login-wrap">
   <div class="login-card">
     <div class="login-logo">
-      <svg width="34" height="34" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/><path d="M26 15H27C28.1 15 29 15.9 29 17V22C29 23.1 28.1 24 27 24H25.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span class="login-logo-text">CallLocally</span>
+      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
+      <span class="logo-text">CallLocally</span>
     </div>
-    <h2>Welcome back</h2>
-    <p>Enter your email and user ID to access your dashboard</p>
-    <div class="login-error" id="loginError"></div>
-    <div class="field-group"><label class="field-label">Email address</label><input class="field-input" id="login-email" type="email" placeholder="mike@mikesplumbing.com"></div>
-    <div class="field-group"><label class="field-label">User ID <span style="font-weight:400;color:var(--muted)">(from your welcome email)</span></label><input class="field-input" id="login-userid" type="text" placeholder="user_1234567890"></div>
-    <button class="login-btn" onclick="handleLogin()">Sign In →</button>
-    <p class="login-note">New here? <a href="/">Start your free trial</a></p>
+    <div class="login-h">Contractor login</div>
+    <div class="login-sub">Enter your user ID and auth token from your welcome email.</div>
+    <div class="login-err" id="loginErr"></div>
+    <div class="form-group">
+      <label class="form-label" for="loginUserId">User ID</label>
+      <input class="form-input" id="loginUserId" type="text" placeholder="Your user ID" style="background:#1A1F27">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="loginToken">Auth token</label>
+      <input class="form-input" id="loginToken" type="password" placeholder="Your auth token" style="background:#1A1F27">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Sign in →</button>
   </div>
 </div>
 
-<div class="app" id="appWrap" style="display:none">
+<!-- DASHBOARD -->
+<div id="dashScreen" class="layout" style="display:none">
   <aside class="sidebar">
-    <a href="/" class="sidebar-logo">
-      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
-      <span class="sidebar-logo-text">CallLocally</span>
-    </a>
+    <div class="sidebar-logo">
+      <svg width="26" height="26" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
+      <span class="logo-text">CallLocally</span>
+    </div>
     <nav class="sidebar-nav">
-      <button class="nav-item active" id="nav-leads" onclick="switchView('leads')">📋 &nbsp;Leads</button>
-      <button class="nav-item" id="nav-settings" onclick="switchView('settings')">⚙️ &nbsp;Settings</button>
+      <div class="nav-item active" onclick="showPage('leads',this)"><span class="nav-icon">📋</span>Leads</div>
+      <div class="nav-item" onclick="showPage('settings',this)"><span class="nav-icon">⚙️</span>Settings</div>
     </nav>
     <div class="sidebar-bottom">
       <div class="trial-box">
-        <div class="trial-label">Free Trial</div>
+        <div class="trial-label" id="planLabel">Free Trial</div>
         <div class="trial-days" id="trialDays">14</div>
-        <div class="trial-sub">days remaining</div>
-        <button class="upgrade-btn" onclick="handleUpgrade()">Upgrade Plan</button>
+        <div class="trial-sub" id="trialSub">days remaining</div>
+        <button class="upgrade-btn" id="upgradeBtn" onclick="handleUpgrade()">Upgrade Plan</button>
       </div>
     </div>
   </aside>
@@ -137,267 +167,444 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="topbar">
       <span class="topbar-title" id="topbarTitle">Leads</span>
       <div class="topbar-right">
-        <div class="topbar-num">Your number: <b id="topbarNum">—</b></div>
-        <button class="logout-btn" onclick="handleLogout()">Sign out</button>
+        <span class="user-badge" id="userBadge"></span>
+        <span class="number-badge" id="numberBadge"></span>
       </div>
     </div>
-    <div class="content">
 
-      <div class="view active" id="view-leads">
-        <div class="stats">
-          <div class="stat"><div class="stat-label">Total leads</div><div class="stat-val" id="statTotal">—</div><div class="stat-sub">all time</div></div>
-          <div class="stat stat-urgent"><div class="stat-label">Urgent</div><div class="stat-val" id="statUrgent">—</div><div class="stat-sub">emergency flagged</div></div>
-          <div class="stat"><div class="stat-label">Captured</div><div class="stat-val" id="statCaptured">—</div><div class="stat-sub">details collected</div></div>
-          <div class="stat"><div class="stat-label">This week</div><div class="stat-val" id="statWeek">—</div><div class="stat-sub">last 7 days</div></div>
-        </div>
-        <div class="sec-header">
-          <span class="sec-title">Recent leads</span>
-          <div class="filter-tabs">
-            <button class="filter-tab active" onclick="filterLeads('all',this)">All</button>
-            <button class="filter-tab" onclick="filterLeads('urgent',this)">Urgent</button>
-            <button class="filter-tab" onclick="filterLeads('captured',this)">Captured</button>
-          </div>
-        </div>
-        <div class="leads-wrap">
-          <div id="leadsLoading" style="text-align:center;padding:40px"><div class="spinner"></div></div>
-          <table id="leadsTable" style="display:none">
-            <thead><tr><th>Time</th><th>Caller</th><th>Service</th><th>Address</th><th>Status</th></tr></thead>
-            <tbody id="leadsBody"></tbody>
-          </table>
-          <div class="empty-state" id="leadsEmpty" style="display:none">
-            <div class="empty-icon">📭</div>
-            <div class="empty-title">No leads yet</div>
-            <div class="empty-sub">Forward your unanswered calls to your CallLocally number and your first lead will show up here.</div>
-          </div>
-        </div>
+    <!-- LEADS PAGE -->
+    <div id="page-leads" class="page">
+      <div class="stats" id="statsRow">
+        <div class="stat-card"><div class="stat-label">Total leads</div><div class="stat-val" id="statTotal">—</div></div>
+        <div class="stat-card"><div class="stat-label">Captured</div><div class="stat-val" id="statCaptured">—</div></div>
+        <div class="stat-card"><div class="stat-label">Urgent</div><div class="stat-val" id="statUrgent" style="color:#FCA5A5">—</div></div>
+        <div class="stat-card"><div class="stat-label">This week</div><div class="stat-val" id="statWeek">—</div></div>
       </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Lead history</div>
+          <div style="font-size:13px;color:var(--muted)" id="leadCount"></div>
+        </div>
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Caller</th>
+              <th>Service / Message</th>
+              <th>Address</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="leadsBody">
+            <tr><td colspan="5" class="empty-state">Loading leads...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-      <div class="view" id="view-settings">
-        <div class="settings-grid">
-          <div class="settings-card">
-            <h3>Your CallLocally number</h3>
-            <div class="field-group"><label class="field-label">Forward unanswered calls to</label>
-              <div class="copy-row"><input class="field-input" id="set-twilio" readonly><button class="copy-btn" onclick="copyNum()">Copy</button></div>
-            </div>
-            <div style="background:rgba(255,92,26,0.07);border:1px solid rgba(255,92,26,0.18);border-radius:var(--r);padding:12px;font-size:13px;color:var(--text);line-height:1.6;margin-top:4px">
-              <b style="color:var(--orange)">iPhone:</b> Settings → Phone → Call Forwarding → On → enter number above<br><br>
-              <b style="color:var(--orange)">Android:</b> Phone → ⋮ → Settings → Supplementary services → Forward when unanswered
-            </div>
-          </div>
-          <div class="settings-card">
-            <h3>Account info</h3>
-            <div class="field-group"><label class="field-label">Business name</label><input class="field-input" id="set-bizname" readonly></div>
-            <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="set-email" readonly></div>
-            <div class="field-group"><label class="field-label">Trade</label><input class="field-input" id="set-trade" readonly></div>
-          </div>
-          <div class="settings-card" style="grid-column:span 2">
-            <h3>Auto-reply message</h3>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">The first text your callers receive when they're missed.</p>
-            <div class="field-group"><label class="field-label">Message <span id="charCount" style="font-weight:400;color:var(--muted)"></span></label>
-              <textarea class="field-textarea" id="set-message" maxlength="320" oninput="updateCharCount()" rows="3"></textarea>
-            </div>
+    <!-- SETTINGS PAGE -->
+    <div id="page-settings" class="page" style="display:none">
+      <div class="settings-grid">
+
+        <!-- Custom message -->
+        <div class="setting-card">
+          <div class="setting-label">Business hours message</div>
+          <div class="setting-desc">Sent to callers when they miss your call during business hours. Leave blank to use the smart default for your trade.</div>
+          <textarea class="form-textarea" id="customMessage" placeholder="Hi! This is [Business] — we're on a job. What do you need and what's the address?"></textarea>
+          <div style="margin-top:10px;display:flex;align-items:center">
             <button class="save-btn" onclick="saveMessage()">Save message</button>
-            <div class="save-success" id="saveSuccess">✓ Saved</div>
+            <span class="save-status" id="msgStatus"></span>
           </div>
         </div>
-      </div>
 
+        <!-- After-hours message -->
+        <div class="setting-card">
+          <div class="setting-label">After-hours message</div>
+          <div class="setting-desc">Sent during off-hours when business hours mode is active. Leave blank to use the smart default for your trade.</div>
+          <textarea class="form-textarea" id="afterHoursMessage" placeholder="Hi! This is [Business] — we're closed. Leave your service need and address and we'll call first thing in the morning."></textarea>
+          <div style="margin-top:10px;display:flex;align-items:center">
+            <button class="save-btn" onclick="saveAfterHours()">Save message</button>
+            <span class="save-status" id="ahStatus"></span>
+          </div>
+        </div>
+
+        <!-- Business hours -->
+        <div class="setting-card">
+          <div class="setting-label">Business hours</div>
+          <div class="setting-desc">When enabled, after-hours callers get your after-hours message instead of the standard one.</div>
+          <div class="toggle-row">
+            <label class="toggle"><input type="checkbox" id="hoursEnabled" onchange="toggleHours()"><span class="toggle-slider"></span></label>
+            <span class="toggle-label">Enable business hours mode</span>
+          </div>
+          <div id="hoursConfig" style="display:none">
+            <div class="hours-row">
+              <div>
+                <div class="setting-label" style="font-size:12px;margin-bottom:6px">Opens at</div>
+                <select class="form-select" id="startHour">
+                  <option value="6">6:00 AM</option><option value="7">7:00 AM</option><option value="8">8:00 AM</option><option value="9">9:00 AM</option><option value="10">10:00 AM</option><option value="11">11:00 AM</option><option value="12">12:00 PM</option><option value="13">13:00 PM</option><option value="14">14:00 PM</option><option value="15">15:00 PM</option><option value="16">16:00 PM</option><option value="17">17:00 PM</option><option value="18">18:00 PM</option>
+                </select>
+              </div>
+              <div>
+                <div class="setting-label" style="font-size:12px;margin-bottom:6px">Closes at</div>
+                <select class="form-select" id="endHour">
+                  <option value="12">12:00 PM</option><option value="13">1:00 PM </option><option value="14">2:00 PM </option><option value="15">3:00 PM </option><option value="16">4:00 PM </option><option value="17">5:00 PM </option><option value="18">6:00 PM </option><option value="19">7:00 PM </option><option value="20">8:00 PM </option><option value="21">9:00 PM </option><option value="22">10:00 PM </option><option value="23">11:00 PM </option>
+                  <option value="20">8:00 PM</option><option value="21">9:00 PM</option>
+                </select>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle"><input type="checkbox" id="weekendOn"><span class="toggle-slider"></span></label>
+              <span class="toggle-label">Accept weekend calls</span>
+            </div>
+            <div style="margin-bottom:10px">
+              <div class="setting-label" style="font-size:12px;margin-bottom:6px">Timezone</div>
+              <select class="form-select" id="timezone">
+                <option value="America/Los_Angeles">Pacific (PT)</option>
+                <option value="America/Denver">Mountain (MT)</option>
+                <option value="America/Chicago">Central (CT)</option>
+                <option value="America/New_York">Eastern (ET)</option>
+                <option value="America/Phoenix">Arizona (no DST)</option>
+                <option value="America/Anchorage">Alaska (AKT)</option>
+                <option value="Pacific/Honolulu">Hawaii (HT)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center">
+            <button class="save-btn" onclick="saveHours()">Save hours</button>
+            <span class="save-status" id="hoursStatus"></span>
+          </div>
+        </div>
+
+        <!-- Team phones -->
+        <div class="setting-card">
+          <div class="setting-label">Team lead delivery</div>
+          <div class="setting-desc">Team plan only. Add phone numbers to receive lead notifications simultaneously. All numbers get the same SMS when a lead comes in.</div>
+          <div id="teamSection">
+            <div id="teamPhonesList"></div>
+            <button class="add-phone-btn" onclick="addPhone()" id="addPhoneBtn">+ Add team member phone</button>
+            <div style="margin-top:12px;display:flex;align-items:center">
+              <button class="save-btn" onclick="saveTeamPhones()" id="saveTeamBtn">Save team phones</button>
+              <span class="save-status" id="teamStatus"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- UPGRADE MODAL -->
+<div id="upgradeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:460px;width:100%">
+    <h2 style="font-family:var(--font-d);font-size:26px;font-weight:800;color:var(--white);margin-bottom:8px">Choose your plan</h2>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:24px">Trial days carry over — no charge until trial ends.</p>
+    <div style="display:grid;gap:10px;margin-bottom:20px">
+      <div onclick="selectPlan('solo')" class="plan-opt" style="background:var(--bg3);border:2px solid var(--border);border-radius:10px;padding:14px;cursor:pointer" id="opt-solo">
+        <div style="font-weight:600;color:var(--white)">Solo <span style="float:right;color:var(--orange)">$49/mo</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">1 number · Unlimited leads · SMS + email</div>
+      </div>
+      <div onclick="selectPlan('growth')" class="plan-opt" style="background:rgba(255,92,26,0.1);border:2px solid var(--orange);border-radius:10px;padding:14px;cursor:pointer" id="opt-growth">
+        <div style="font-weight:600;color:var(--white)">Growth ⭐ <span style="float:right;color:var(--orange)">$79/mo</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Everything in Solo + after-hours mode</div>
+      </div>
+      <div onclick="selectPlan('team')" class="plan-opt" style="background:var(--bg3);border:2px solid var(--border);border-radius:10px;padding:14px;cursor:pointer" id="opt-team">
+        <div style="font-weight:600;color:var(--white)">Team <span style="float:right;color:var(--orange)">$129/mo</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Growth + multi-member SMS delivery</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="checkout()" style="flex:1;padding:12px;background:var(--orange);color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)" id="checkoutBtn">Continue →</button>
+      <button onclick="closeUpgrade()" style="padding:12px 18px;background:none;color:var(--muted);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-family:var(--font)">Cancel</button>
     </div>
   </div>
 </div>
 
 <script>
-const API = 'https://main-production-147d.up.railway.app';
-let currentUser = null, allLeads = [];
+const API = 'https://calllocally.com';
+let currentUser = null;
+let currentToken = null;
+let selectedPlan = 'growth';
 
-function handleLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const userId = document.getElementById('login-userid').value.trim();
-  const errEl = document.getElementById('loginError');
-  errEl.classList.remove('show');
-  if (!email || !userId) { errEl.textContent = 'Please enter your email and user ID.'; errEl.classList.add('show'); return; }
-  sessionStorage.setItem('cl_userId', userId);
-  loadDashboard(userId);
-}
-
-function handleLogout() {
-  sessionStorage.clear(); currentUser = null; allLeads = [];
-  document.getElementById('appWrap').style.display = 'none';
-  document.getElementById('loginWrap').style.display = 'flex';
-}
-
-async function loadDashboard(userId) {
+// ── AUTH ──
+function getSession() {
   try {
-    const [userRes, leadsRes] = await Promise.all([
-      fetch(API + '/api/user/' + userId),
-      fetch(API + '/api/leads?userId=' + userId)
+    const s = JSON.parse(sessionStorage.getItem('cl_session') || 'null');
+    if(s?.userId && s?.token) return s;
+  } catch(e){}
+  const params = new URLSearchParams(location.search);
+  const userId = params.get('userId');
+  const token = params.get('token');
+  if(userId && token) { saveSession(userId, token); return {userId, token}; }
+  return null;
+}
+function saveSession(userId, token) {
+  sessionStorage.setItem('cl_session', JSON.stringify({userId, token}));
+}
+
+async function doLogin() {
+  const userId = document.getElementById('loginUserId').value.trim();
+  const token = document.getElementById('loginToken').value.trim();
+  const err = document.getElementById('loginErr');
+  err.style.display='none';
+  if(!userId || !token) { err.textContent='Enter both fields.'; err.style.display='block'; return; }
+  try {
+    const r = await fetch(API+'/api/user/'+userId, { headers:{'x-auth-token':token} });
+    if(!r.ok) throw new Error('Invalid credentials');
+    saveSession(userId, token);
+    loadDashboard(userId, token);
+  } catch(e) { err.textContent = e.message; err.style.display='block'; }
+}
+
+async function loadDashboard(userId, token) {
+  currentToken = token;
+  try {
+    const [userR, leadsR] = await Promise.all([
+      fetch(API+'/api/user/'+userId, { headers:{'x-auth-token':token} }),
+      fetch(API+'/api/leads?userId='+userId+'&token='+token, { headers:{'x-auth-token':token} }),
     ]);
-    if (!userRes.ok) {
-      const errEl = document.getElementById('loginError');
-      errEl.textContent = 'User not found. Check your user ID.'; errEl.classList.add('show'); return;
-    }
-    currentUser = await userRes.json();
-    allLeads = await leadsRes.json();
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('appWrap').style.display = 'grid';
-    document.getElementById('topbarNum').textContent = fmt(currentUser.twilioNumber);
-    populateStats(); populateLeads(allLeads); populateSettings(); updateTrialDays();
-  } catch(e) {
-    const errEl = document.getElementById('loginError');
-    errEl.textContent = 'Network error. Please try again.'; errEl.classList.add('show');
+    if(!userR.ok) { showLogin(); return; }
+    currentUser = await userR.json();
+    const leads = leadsR.ok ? await leadsR.json() : [];
+
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('dashScreen').style.display='flex';
+
+    // Topbar
+    document.getElementById('userBadge').textContent = currentUser.business_name || currentUser.name;
+    document.getElementById('numberBadge').textContent = currentUser.twilio_number || '—';
+
+    // Trial / plan badge
+    updateTrialBadge();
+
+    // Stats
+    const captured = leads.filter(l=>l.status==='captured').length;
+    const urgent = leads.filter(l=>l.urgent).length;
+    const weekAgo = new Date(Date.now()-7*24*60*60*1000);
+    const thisWeek = leads.filter(l=>new Date(l.created_at)>weekAgo).length;
+    document.getElementById('statTotal').textContent = leads.length;
+    document.getElementById('statCaptured').textContent = captured;
+    document.getElementById('statUrgent').textContent = urgent;
+    document.getElementById('statWeek').textContent = thisWeek;
+    document.getElementById('leadCount').textContent = leads.length + ' leads';
+
+    renderLeads(leads);
+    loadSettings();
+  } catch(e) { console.error(e); }
+}
+
+function updateTrialBadge() {
+  const u = currentUser;
+  if(u.paid && u.plan) {
+    document.getElementById('planLabel').textContent = u.plan.charAt(0).toUpperCase()+u.plan.slice(1)+' Plan';
+    document.getElementById('trialDays').textContent = '✓';
+    document.getElementById('trialSub').textContent = 'Active subscription';
+    document.getElementById('upgradeBtn').textContent = 'Manage Billing';
+    document.getElementById('upgradeBtn').onclick = manageBilling;
+    return;
   }
+  const daysLeft = Math.max(0, Math.ceil((new Date(u.trial_ends_at)-Date.now())/86400000));
+  document.getElementById('planLabel').textContent = 'Free Trial';
+  document.getElementById('trialDays').textContent = daysLeft;
+  document.getElementById('trialSub').textContent = 'days remaining';
 }
 
-function populateStats() {
-  const now = Date.now(), week = 7*24*60*60*1000;
-  document.getElementById('statTotal').textContent = allLeads.length;
-  document.getElementById('statUrgent').textContent = allLeads.filter(l=>l.urgent).length;
-  document.getElementById('statCaptured').textContent = allLeads.filter(l=>l.status==='captured').length;
-  document.getElementById('statWeek').textContent = allLeads.filter(l=>new Date(l.createdAt)>now-week).length;
-}
-
-function populateLeads(leads) {
-  document.getElementById('leadsLoading').style.display = 'none';
-  if (!leads.length) { document.getElementById('leadsEmpty').style.display='block'; document.getElementById('leadsTable').style.display='none'; return; }
-  document.getElementById('leadsEmpty').style.display='none'; document.getElementById('leadsTable').style.display='table';
-  document.getElementById('leadsBody').innerHTML = leads.map(l => {
-    const d = new Date(l.createdAt);
-    const badge = l.urgent ? '<span class="badge badge-urgent">🚨 Urgent</span>' : l.status==='captured' ? '<span class="badge badge-captured">✓ Captured</span>' : '<span class="badge badge-waiting">Waiting</span>';
-    return `<tr><td style="color:var(--muted)">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})} <b style="color:var(--text)">${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</b></td><td><a href="tel:${l.callerPhone}" class="phone-link">${fmt(l.callerPhone)}</a></td><td>${l.service||'<span style="color:var(--muted)">—</span>'}</td><td>${l.address||'<span style="color:var(--muted)">—</span>'}</td><td>${badge}</td></tr>`;
+function renderLeads(leads) {
+  const body = document.getElementById('leadsBody');
+  if(!leads.length) {
+    body.innerHTML='<tr><td colspan="5" class="empty-state">No leads yet. Once you forward a missed call, leads will appear here.</td></tr>';
+    return;
+  }
+  body.innerHTML = leads.map(l => {
+    const badge = l.urgent
+      ? '<span class="badge badge-urgent">🚨 Urgent</span>'
+      : l.status==='captured'
+        ? '<span class="badge badge-captured">Captured</span>'
+        : '<span class="badge badge-waiting">Waiting</span>';
+    const time = new Date(l.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    const service = (l.service||'').slice(0,60) + ((l.service||'').length>60?'...':'');
+    return `<tr>
+      <td style="font-family:monospace;font-size:13px">${l.caller_phone}</td>
+      <td>${service || '<span style="color:var(--muted)">Waiting for reply...</span>'}</td>
+      <td style="font-size:13px;color:var(--muted)">${l.address||'—'}</td>
+      <td>${badge}${l.after_hours?' <span style="font-size:11px;color:var(--muted)">⏰</span>':''}</td>
+      <td style="font-size:13px;color:var(--muted)">${time}</td>
+    </tr>`;
   }).join('');
 }
 
-function filterLeads(type, btn) {
-  document.querySelectorAll('.filter-tab').forEach(t=>t.classList.remove('active')); btn.classList.add('active');
-  populateLeads(type==='all'?allLeads:type==='urgent'?allLeads.filter(l=>l.urgent):allLeads.filter(l=>l.status===type));
+function loadSettings() {
+  const u = currentUser;
+  document.getElementById('customMessage').value = u.custom_message || '';
+  document.getElementById('afterHoursMessage').value = u.after_hours_message || '';
+
+  // Business hours
+  if(u.business_hours) {
+    document.getElementById('hoursEnabled').checked = true;
+    document.getElementById('hoursConfig').style.display='block';
+    document.getElementById('startHour').value = u.business_hours.startHour || 7;
+    document.getElementById('endHour').value = u.business_hours.endHour || 20;
+    document.getElementById('weekendOn').checked = u.business_hours.weekendOn || false;
+    document.getElementById('timezone').value = u.timezone || 'America/Los_Angeles';
+  }
+
+  // Team phones — only show full UI on team plan
+  const phones = u.team_phones || [];
+  const teamSection = document.getElementById('teamSection');
+  if(u.plan !== 'team' && !u.paid) {
+    document.getElementById('teamPhonesList').innerHTML = '';
+    document.getElementById('addPhoneBtn').style.display='none';
+    document.getElementById('saveTeamBtn').style.display='none';
+    teamSection.insertAdjacentHTML('afterbegin','<div class="plan-gate">Team phone delivery requires the Team plan ($129/mo). Upgrade to add multiple delivery numbers.</div>');
+  } else {
+    renderTeamPhones(phones);
+  }
 }
 
-function populateSettings() {
-  document.getElementById('set-twilio').value = currentUser.twilioNumber||'';
-  document.getElementById('set-bizname').value = currentUser.businessName||'';
-  document.getElementById('set-email').value = currentUser.email||'';
-  document.getElementById('set-trade').value = (currentUser.trade||'').charAt(0).toUpperCase()+(currentUser.trade||'').slice(1);
-  document.getElementById('set-message').value = currentUser.customMessage||'';
-  updateCharCount();
-}
-
-function updateTrialDays() {
-  if (currentUser.paid && currentUser.plan) {
-    document.getElementById('trialDays').textContent = currentUser.plan.charAt(0).toUpperCase() + currentUser.plan.slice(1);
-    document.querySelector('.trial-label').textContent = 'Active Plan';
-    document.querySelector('.trial-sub').textContent = 'Subscription active';
-    document.querySelector('.upgrade-btn').textContent = 'Manage Billing';
-    document.querySelector('.upgrade-btn').onclick = handleBillingPortal;
+// ── TEAM PHONES ──
+let teamPhones = [];
+function renderTeamPhones(phones) {
+  teamPhones = [...phones];
+  const list = document.getElementById('teamPhonesList');
+  if(!teamPhones.length) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--muted);margin-bottom:10px">No team members added yet. Leads go to your primary number only.</div>';
     return;
   }
-
-  if (!currentUser.trialEndsAt) return;
-  document.getElementById('trialDays').textContent = Math.max(0, Math.ceil((new Date(currentUser.trialEndsAt)-Date.now())/86400000));
+  list.innerHTML = teamPhones.map((p,i) => `
+    <div class="team-phone-row">
+      <input class="team-phone-input" type="tel" value="${p}" placeholder="(555) 000-0000"
+        onchange="teamPhones[${i}]=this.value" oninput="teamPhones[${i}]=this.value">
+      <button class="remove-btn" onclick="removePhone(${i})">✕</button>
+    </div>
+  `).join('');
+}
+function addPhone() {
+  teamPhones.push('');
+  renderTeamPhones(teamPhones);
+  document.querySelectorAll('.team-phone-input').forEach((el,i) => {
+    el.onchange = () => teamPhones[i] = el.value;
+    el.oninput = () => teamPhones[i] = el.value;
+  });
+  document.querySelectorAll('.team-phone-input').item(teamPhones.length-1)?.focus();
+}
+function removePhone(i) {
+  teamPhones.splice(i,1);
+  renderTeamPhones(teamPhones);
+}
+async function saveTeamPhones() {
+  const phones = teamPhones.filter(p=>p.trim());
+  await patchUser({ teamPhones: phones }, 'teamStatus');
 }
 
-async function saveMessage() {
-  const msg = document.getElementById('set-message').value.trim();
-  if (!msg) return;
-  await fetch(API+'/api/user/'+currentUser.id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({customMessage:msg}) });
-  const el = document.getElementById('saveSuccess'); el.style.display='block'; setTimeout(()=>el.style.display='none',2500);
-}
-
-function copyNum() {
-  navigator.clipboard.writeText(document.getElementById('set-twilio').value);
-  const btn = document.querySelector('.copy-btn'); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1800);
-}
-
-function updateCharCount() { document.getElementById('charCount').textContent = document.getElementById('set-message').value.length+'/320'; }
-
-function switchView(name) {
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.getElementById('view-'+name).classList.add('active');
-  document.getElementById('nav-'+name).classList.add('active');
-  document.getElementById('topbarTitle').textContent = name.charAt(0).toUpperCase()+name.slice(1);
-}
-
-async function handleUpgrade() {
-  // Show plan picker modal
-  const plan = await showPlanPicker();
-  if (!plan) return;
-  const btn = document.querySelector('.upgrade-btn');
-  btn.textContent = 'Loading...';
-  btn.disabled = true;
+// ── SETTINGS SAVES ──
+async function patchUser(body, statusId) {
+  const el = document.getElementById(statusId);
+  el.className = 'save-status';
+  el.textContent = 'Saving...';
+  el.classList.add('show');
   try {
-    const r = await fetch('https://main-production-147d.up.railway.app/api/create-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentUser.id, plan })
+    const r = await fetch(API+'/api/user/'+currentUser.id, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-auth-token':currentToken},
+      body: JSON.stringify(body),
     });
-    const d = await r.json();
-    if (d.url) {
-      window.location.href = d.url;
-    } else {
-      alert('Error: ' + (d.error || 'Could not create checkout'));
-      btn.textContent = 'Upgrade Plan';
-      btn.disabled = false;
-    }
+    if(!r.ok) throw new Error('Save failed');
+    el.textContent = 'Saved ✓';
+    el.classList.add('ok');
+    setTimeout(()=>el.classList.remove('show'),3000);
   } catch(e) {
-    alert('Network error. Please try again.');
-    btn.textContent = 'Upgrade Plan';
-    btn.disabled = false;
+    el.textContent = 'Error — try again';
+    el.classList.add('err');
+    setTimeout(()=>el.classList.remove('show'),4000);
   }
 }
-
-async function handleBillingPortal() {
-  const r = await fetch('https://main-production-147d.up.railway.app/api/billing-portal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: currentUser.id })
-  });
-  const d = await r.json();
-  if (d.url) window.location.href = d.url;
+function saveMessage() {
+  const msg = document.getElementById('customMessage').value.trim();
+  patchUser({ customMessage: msg || null }, 'msgStatus');
+}
+function saveAfterHours() {
+  const msg = document.getElementById('afterHoursMessage').value.trim();
+  patchUser({ afterHoursMessage: msg || null }, 'ahStatus');
+}
+function toggleHours() {
+  const enabled = document.getElementById('hoursEnabled').checked;
+  document.getElementById('hoursConfig').style.display = enabled ? 'block':'none';
+}
+function saveHours() {
+  const enabled = document.getElementById('hoursEnabled').checked;
+  const hours = enabled ? {
+    startHour: parseInt(document.getElementById('startHour').value),
+    endHour: parseInt(document.getElementById('endHour').value),
+    weekendOn: document.getElementById('weekendOn').checked,
+  } : null;
+  const timezone = document.getElementById('timezone').value;
+  patchUser({ businessHours: hours, timezone }, 'hoursStatus');
 }
 
-function showPlanPicker() {
-  return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
-    overlay.innerHTML = `<div style="background:#13171D;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;max-width:480px;width:100%">
-      <h2 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:8px">Choose your plan</h2>
-      <p style="color:#7A8090;font-size:14px;margin-bottom:24px">Your trial days will carry over — you won't be charged until your trial ends.</p>
-      <div style="display:grid;gap:12px">
-        <button onclick="window._planChoice='solo'" style="background:rgba(255,92,26,0.08);border:2px solid rgba(255,92,26,0.3);border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
-          <div style="font-weight:700;font-size:16px">Solo <span style="float:right;color:#FF5C1A">$49/mo</span></div>
-          <div style="font-size:13px;color:#7A8090;margin-top:4px">1 user · Unlimited leads · SMS + email delivery</div>
-        </button>
-        <button onclick="window._planChoice='growth'" style="background:rgba(255,92,26,0.15);border:2px solid #FF5C1A;border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
-          <div style="font-weight:700;font-size:16px">Growth ⭐ <span style="float:right;color:#FF5C1A">$79/mo</span></div>
-          <div style="font-size:13px;color:#7A8090;margin-top:4px">Everything in Solo + after-hours mode + priority support</div>
-        </button>
-        <button onclick="window._planChoice='team'" style="background:rgba(255,92,26,0.08);border:2px solid rgba(255,92,26,0.3);border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
-          <div style="font-weight:700;font-size:16px">Team <span style="float:right;color:#FF5C1A">$129/mo</span></div>
-          <div style="font-size:13px;color:#7A8090;margin-top:4px">Everything in Growth + multi-member delivery + dispatcher mode</div>
-        </button>
-      </div>
-      <div style="display:flex;gap:12px;margin-top:20px">
-        <button onclick="window._planResolve(window._planChoice)" style="flex:1;background:#FF5C1A;color:white;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Continue →</button>
-        <button onclick="window._planResolve(null)" style="background:rgba(255,255,255,0.05);color:#7A8090;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:13px 20px;font-size:15px;cursor:pointer;font-family:inherit">Cancel</button>
-      </div>
-    </div>`;
-    window._planChoice = 'growth';
-    window._planResolve = (val) => { document.body.removeChild(overlay); resolve(val); };
-    document.body.appendChild(overlay);
+// ── UPGRADE ──
+function handleUpgrade() { document.getElementById('upgradeModal').style.display='flex'; }
+function closeUpgrade() { document.getElementById('upgradeModal').style.display='none'; }
+function selectPlan(plan) {
+  selectedPlan = plan;
+  ['solo','growth','team'].forEach(p => {
+    const el = document.getElementById('opt-'+p);
+    el.style.borderColor = p===plan ? 'var(--orange)' : 'var(--border)';
+    el.style.background = p===plan ? 'rgba(255,92,26,0.1)' : 'var(--bg3)';
   });
 }
-
-function fmt(num) {
-  if (!num) return '—';
-  const d = (num||'').replace(/\D/g,'');
-  if (d.length===11) return '('+d.slice(1,4)+') '+d.slice(4,7)+'-'+d.slice(7);
-  if (d.length===10) return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
-  return num;
+async function checkout() {
+  const btn = document.getElementById('checkoutBtn');
+  btn.textContent = 'Loading...'; btn.disabled=true;
+  try {
+    const r = await fetch(API+'/api/create-checkout', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ userId:currentUser.id, plan:selectedPlan, authToken:currentToken }),
+    });
+    const d = await r.json();
+    if(d.url) window.location.href = d.url;
+    else throw new Error(d.error||'Error');
+  } catch(e) {
+    btn.textContent='Continue →'; btn.disabled=false;
+    alert('Error: '+e.message);
+  }
+}
+async function manageBilling() {
+  try {
+    const r = await fetch(API+'/api/billing-portal', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ userId:currentUser.id, authToken:currentToken }),
+    });
+    const d = await r.json();
+    if(d.url) window.location.href = d.url;
+  } catch(e) { alert('Error opening billing portal: '+e.message); }
 }
 
-document.addEventListener('keydown', e => { if (e.key==='Enter' && document.getElementById('loginWrap').style.display!=='none') handleLogin(); });
-const savedId = sessionStorage.getItem('cl_userId');
-if (savedId) loadDashboard(savedId);
+// ── NAV ──
+function showPage(page, el) {
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.style.display='none');
+  document.getElementById('page-'+page).style.display='block';
+  document.getElementById('topbarTitle').textContent = page.charAt(0).toUpperCase()+page.slice(1);
+}
+function showLogin() {
+  sessionStorage.removeItem('cl_session');
+  document.getElementById('dashScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+// ── INIT ──
+window.addEventListener('DOMContentLoaded', () => {
+  const session = getSession();
+  if(session) loadDashboard(session.userId, session.token);
+});
+
+// Close upgrade modal on outside click
+document.getElementById('upgradeModal')?.addEventListener('click', e => {
+  if(e.target === document.getElementById('upgradeModal')) closeUpgrade();
+});
 </script>
 </body>
 </html>
