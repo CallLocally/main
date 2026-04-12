@@ -198,7 +198,6 @@ function isActive(user) {
   if (user.paid) return true;
   if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
   if (user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  if (!user.trial_ends_at && !user.paid) return true; // Verification pending — treat as active
   return false;
 }
 function isBusinessHours(user) {
@@ -265,7 +264,7 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
 
     const userId = uuidv4(); // secure random UUID
     const authToken = uuidv4(); // dashboard auth token
-    const trialEndsAt = null; // Trial starts when number is verified, not at signup
+    const trialEndsAt = new Date(Date.now() + 14*24*60*60*1000);
 
     await pool.query(`
       INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at, carrier)
@@ -307,7 +306,7 @@ app.post('/api/create-checkout', async (req, res) => {
       cid = c.id;
       await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [cid, userId]);
     }
-    const trialEnd = user.trial_ends_at ? new Date(user.trial_ends_at).getTime() : 0;
+    const trialEnd = new Date(user.trial_ends_at).getTime();
     const session = await stripe.checkout.sessions.create({
       customer: cid,
       payment_method_types: ['card'],
