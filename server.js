@@ -957,6 +957,35 @@ async function checkTFVStatus() {
 setInterval(checkTFVStatus, 60*60*1000);
 setTimeout(checkTFVStatus, 15000);
 
+// ── TFV STATUS POLLER ──
+async function checkTFVStatus() {
+  try {
+    const { rows } = await pool.query("SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL) AND paid=FALSE");
+    if (!rows.length) return;
+    const auth = 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+    for (const user of rows) {
+      try {
+        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encodeURIComponent(user.twilio_number)}`, { headers: { 'Authorization': auth } });
+        const d = await r.json();
+        const v = d.verifications?.[0];
+        if (!v) continue;
+        if (v.status === 'TWILIO_APPROVED') {
+          const trialEnd = new Date(Date.now() + 14*24*60*60*1000);
+          await pool.query('UPDATE users SET tfv_notified=TRUE, trial_ends_at=$2 WHERE id=$1', [user.id, trialEnd]);
+          const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
+          await sendVerifiedEmail(fresh);
+          console.log(`TFV approved + trial started: ${user.twilio_number}`);
+        } else if (v.status === 'TWILIO_REJECTED') {
+          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
+          if (process.env.SENDGRID_API_KEY) await sgMail.send({ to: user.email, from: 'hello@calllocally.com', subject: 'Action needed: your CallLocally number verification', html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>` }).catch(e => console.error('Rejection email:', e.message));
+        }
+      } catch(e) { console.error(`TFV check ${user.twilio_number}:`, e.message); }
+    }
+  } catch(e) { console.error('TFV poller error:', e.message); }
+}
+setInterval(checkTFVStatus, 60*60*1000);
+setTimeout(checkTFVStatus, 15000);
+
 setInterval(checkTrials, 60*60*1000);
 setTimeout(checkTrials, 8000);
 
