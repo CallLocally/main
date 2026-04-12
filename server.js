@@ -1,4 +1,31 @@
-// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
+html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
+      <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
+      <p style="font-size:16px">Your CallLocally number is reserved:</p>
+      <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
+
+      <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:20px;margin:24px 0">
+        <p style="font-size:15px;font-weight:700;color:#FF5C1A;margin:0 0 8px">⏳ Step 1 of 2: Carrier verification in progress</p>
+        <p style="font-size:14px;color:#555;margin:0;line-height:1.6">
+          Your number is going through a quick carrier verification required by US telecom regulations.
+          This takes <b>1–3 business days</b>. Once approved, your number can send texts to missed callers.<br><br>
+          <b>We'll email you the moment it's verified</b> with your final setup instructions.
+          You don't need to do anything right now.
+        </p>
+      </div>
+
+      <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
+        <p style="font-size:13px;color:#555;margin:0">
+          <b>How it works once verified:</b><br>
+          1. You forward unanswered calls from your phone to your CallLocally number (takes 1 min)<br>
+          2. When a customer calls and you don't answer, they hear a voicemail greeting<br>
+          3. They can leave a voicemail or text back with their service need<br>
+          4. You get notified instantly via SMS and email
+        </p>
+      </div>
+
+      <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard" style="color:#FF5C1A">calllocally.com/dashboard</a></p>
+      <p style="font-size:13px;color:#999">Questions? Reply to this email or reach us at hello@calllocally.com</p>
+    </div>`,// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
 async function submitTollFreeVerification(user) {
   const TSID = process.env.TWILIO_ACCOUNT_SID;
   const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -460,41 +487,72 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
 });
 
 // ── CALL FORWARDING ──
-// Twilio hits this when someone calls the toll-free number (voiceUrl)
-// Architecture: NO dial-back (avoids the busy loop when forwarding from same number)
-// Instead: ring the contractor's phone via <Dial>, and if no answer,
-// immediately play voicemail + send SMS. Clean, no loop possible.
+// Twilio hits this when someone calls the toll-free number
+// Changed to POST so Twilio body params (Direction, To, etc) are available
 app.post('/api/forward', async (req, res) => {
   res.set('Content-Type', 'text/xml');
 
   const calledNum = req.body.To || req.body.Called;
-  const callerNum = req.body.From || req.body.Caller;
-
   const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
   const user = rows[0];
 
-  if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say><Hangup/></Response>');
-  if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say><Hangup/></Response>');
+  if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
+  if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say></Response>');
+
+  // Dial contractor for 15s. When done (answered or not), Twilio POSTs to /api/dial-complete.
+  // The caller stays on hold during the dial — they never hear a ring, just silence/hold music.
+  res.send(`<?xml version="1.0"?><Response>
+    <Dial timeout="15" action="${RAILWAY_URL}/api/dial-complete" method="POST">
+      ${user.business_phone}
+    </Dial>
+  </Response>`);
+});
+
+// ── DIAL COMPLETE ──
+// Twilio POSTs here when the <Dial> verb ends (contractor answered, or timeout/busy/failed)
+// req.body.DialCallStatus = "completed" | "no-answer" | "busy" | "failed"
+// req.body.From = original caller's number
+// req.body.To = the Twilio number that was called
+app.post('/api/dial-complete', async (req, res) => {
+  res.set('Content-Type', 'text/xml');
+
+  const { DialCallStatus, From, To, Called } = req.body;
+  const calledNum = To || Called;
+  const callerNum = From;
+
+  // Contractor answered — done, hang up
+  if (DialCallStatus === 'completed') {
+    return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
+  }
+
+  // Contractor didn't answer — get their info, send lead SMS, play voicemail
+  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
+  const user = rows[0];
+  if (!user || !isActive(user)) {
+    return res.send('<?xml version="1.0"?><Response><Say>Sorry, this number is unavailable.</Say><Hangup/></Response>');
+  }
 
   const isAH = !isBusinessHours(user);
-  const vmGreeting = user.custom_message
-    ? user.custom_message
-    : isAH
-      ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and we'll call you back in the morning.`
-      : `Hi, you've reached ${user.business_name}. We're on a job. Please leave a voicemail or text this number your service need and address and we'll call you right back.`;
 
-  // Send lead capture SMS immediately — contractor knows someone called
+  // Send lead capture SMS to caller immediately
   const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
-  const smsMsg = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
+  const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
   try {
-    await twilioClient.messages.create({ body: smsMsg, from: user.twilio_number, to: callerNum });
-    await pool.query('INSERT INTO leads (id, user_id, caller_phone, after_hours) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+    await twilioClient.messages.create({ body: message, from: user.twilio_number, to: callerNum });
+    await pool.query('INSERT INTO leads (id, user_id, caller_phone, after_hours) VALUES ($1,$2,$3,$4)',
       [uuidv4(), user.id, callerNum, isAH]);
     await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
-    console.log(`Lead SMS sent: ${callerNum} → ${user.business_name} (${user.twilio_number})`);
+    console.log(`Lead captured: ${callerNum} → ${user.business_name}`);
   } catch(e) { console.error('Lead SMS error:', e.message); }
 
   // Play voicemail greeting and record
+  const isAfterHours = isAH;
+  const vmGreeting = user.custom_message
+    ? `Please leave a voicemail or text this number your service need and address.`
+    : isAfterHours
+      ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and we'll call you back in the morning.`
+      : `Hi, you've reached ${user.business_name}. We're on a job. Please leave a voicemail or text this number your service need and address and we'll call you right back.`;
+
   res.send(`<?xml version="1.0"?><Response>
     <Say voice="Polly.Joanna">${vmGreeting}</Say>
     <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
@@ -685,7 +743,7 @@ async function sendWelcomeEmail(user) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: "You're live on CallLocally — one step left",
+      subject: "You're signed up! Your CallLocally number is being verified.",
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
         <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
         <p style="font-size:16px">Your CallLocally number is ready:</p>
