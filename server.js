@@ -460,31 +460,20 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
 });
 
 // ── CALL FORWARDING ──
-app.get('/api/forward', async (req, res) => {
-  // Block retries — only handle genuine inbound calls
-  const direction = req.query.Direction || '';
-  if (direction && direction !== 'inbound') {
-    res.set('Content-Type', 'text/xml');
-    return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
-  }
+// Twilio hits this when someone calls the toll-free number
+// Changed to POST so Twilio body params (Direction, To, etc) are available
+app.post('/api/forward', async (req, res) => {
+  res.set('Content-Type', 'text/xml');
 
-  const calledNum = req.query.To || req.query.Called;
+  const calledNum = req.body.To || req.body.Called;
   const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
   const user = rows[0];
-  res.set('Content-Type', 'text/xml');
 
   if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
   if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say></Response>');
 
-  const isAH = !isBusinessHours(user);
-  const vmGreeting = user.custom_message
-    ? `Please leave a voicemail or text this number your service need and address.`
-    : isAH
-      ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and address and we'll call you back in the morning.`
-      : `Hi, you've reached ${user.business_name}. We're on a job right now. Please leave a voicemail, or text this number your service need and address and we'll call you right back.`;
-
-  // Dial contractor for 15 seconds (shorter than carrier voicemail default ~20s)
-  // When dial times out, falls through to <Say> + <Record> — NOT back to /api/forward
+  // Dial contractor for 15s. When done (answered or not), Twilio POSTs to /api/dial-complete.
+  // The caller stays on hold during the dial — they never hear a ring, just silence/hold music.
   res.send(`<?xml version="1.0"?><Response>
     <Dial timeout="15" action="${RAILWAY_URL}/api/dial-complete" method="POST">
       ${user.business_phone}
@@ -492,18 +481,24 @@ app.get('/api/forward', async (req, res) => {
   </Response>`);
 });
 
-// ── DIAL COMPLETE (fires when <Dial> ends for any reason) ──
-app.post('/api/dial-complete', validateTwilio, async (req, res) => {
-  const { DialCallStatus, Called, To, Caller } = req.body;
-  const calledNum = Called || To;
+// ── DIAL COMPLETE ──
+// Twilio POSTs here when the <Dial> verb ends (contractor answered, or timeout/busy/failed)
+// req.body.DialCallStatus = "completed" | "no-answer" | "busy" | "failed"
+// req.body.From = original caller's number
+// req.body.To = the Twilio number that was called
+app.post('/api/dial-complete', async (req, res) => {
   res.set('Content-Type', 'text/xml');
 
-  // If contractor answered — just hang up cleanly, nothing more to do
+  const { DialCallStatus, From, To, Called } = req.body;
+  const calledNum = To || Called;
+  const callerNum = From;
+
+  // Contractor answered — done, hang up
   if (DialCallStatus === 'completed') {
     return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
   }
 
-  // Contractor didn't answer — send caller to voicemail and fire lead SMS
+  // Contractor didn't answer — get their info, send lead SMS, play voicemail
   const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
   const user = rows[0];
   if (!user || !isActive(user)) {
@@ -512,20 +507,22 @@ app.post('/api/dial-complete', validateTwilio, async (req, res) => {
 
   const isAH = !isBusinessHours(user);
 
-  // Fire lead SMS immediately (caller didn't connect)
+  // Send lead capture SMS to caller immediately
   const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
   const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
   try {
-    await twilioClient.messages.create({ body: message, from: user.twilio_number, to: Caller });
+    await twilioClient.messages.create({ body: message, from: user.twilio_number, to: callerNum });
     await pool.query('INSERT INTO leads (id, user_id, caller_phone, after_hours) VALUES ($1,$2,$3,$4)',
-      [uuidv4(), user.id, Caller, isAH]);
+      [uuidv4(), user.id, callerNum, isAH]);
     await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
+    console.log(`Lead captured: ${callerNum} → ${user.business_name}`);
   } catch(e) { console.error('Lead SMS error:', e.message); }
 
   // Play voicemail greeting and record
+  const isAfterHours = isAH;
   const vmGreeting = user.custom_message
     ? `Please leave a voicemail or text this number your service need and address.`
-    : isAH
+    : isAfterHours
       ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and we'll call you back in the morning.`
       : `Hi, you've reached ${user.business_name}. We're on a job. Please leave a voicemail or text this number your service need and address and we'll call you right back.`;
 
