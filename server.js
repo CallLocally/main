@@ -20,7 +20,7 @@ async function submitTollFreeVerification(user) {
     BusinessContactFirstName: firstName,
     BusinessContactLastName: lastName,
     BusinessContactEmail: user.email,
-    BusinessContactPhone: user.twilioNumber,
+    BusinessContactPhone: user.businessPhone || user.business_phone || user.twilioNumber,
     UseCaseCategories: 'ACCOUNT_NOTIFICATIONS',
     UseCaseSummary: `CallLocally sends automated SMS to missed callers on behalf of ${biz}, a home service contractor. When a customer calls and gets no answer, CallLocally texts them to capture their service need and address. The contractor receives lead details via SMS and email. No marketing messages.`,
     ProductionMessageSample: `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
@@ -371,7 +371,7 @@ app.post('/api/stripe-webhook', async (req, res) => {
     case 'customer.subscription.updated': {
       const sub = event.data.object;
       await pool.query('UPDATE users SET paid=$1, plan=$2 WHERE stripe_subscription_id=$3',
-        [['active','trialing'].includes(sub.status), sub.metadata?.plan||null, sub.id]);
+        [['active','trialing','past_due'].includes(sub.status), sub.metadata?.plan||null, sub.id]);
       break;
     }
     case 'customer.subscription.deleted': {
@@ -395,11 +395,12 @@ app.post('/api/stripe-webhook', async (req, res) => {
 
 
 // ── VOICEMAIL RECORDING COMPLETE ──
-app.post('/api/voicemail', async (req, res) => {
-  const { RecordingUrl, RecordingDuration, Called, Caller, RecordingSid } = req.body;
-  if (!RecordingUrl || !Called) return res.status(200).send('OK');
+app.post('/api/voicemail', validateTwilio, async (req, res) => {
+  const { RecordingUrl, RecordingDuration, Called, To: ToVM, Caller, RecordingSid } = req.body;
+  const calledNumber = Called || ToVM;
+  if (!RecordingUrl || !calledNumber) return res.status(200).send('OK');
 
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [Called]);
+  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNumber]);
   const user = rows[0];
   if (!user || !isActive(user)) return res.status(200).send('OK');
 
@@ -409,7 +410,7 @@ app.post('/api/voicemail', async (req, res) => {
   // Insert lead for voicemail if no existing waiting lead from this caller
   const existingLead = await pool.query(`
     SELECT id FROM leads WHERE user_id=$1 AND caller_phone=$2 AND status='waiting'
-    AND created_at > NOW() - INTERVAL '10 minutes'
+    AND created_at > NOW() - INTERVAL '24 hours'
   `, [user.id, Caller]);
 
   if (!existingLead.rows.length) {
@@ -465,6 +466,7 @@ app.get('/api/forward', async (req, res) => {
   const user = rows[0];
   res.set('Content-Type', 'text/xml');
   if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
+  if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say></Response>');
   const vmGreeting = user.custom_message
       ? `Please leave a message or text this number your service need and address.`
       : `Hi, you've reached ${user.business_name}. We're on a job right now. Please leave a voicemail, or text this number your service need and address and we'll call you right back.`;
@@ -473,7 +475,7 @@ app.get('/api/forward', async (req, res) => {
       ${user.business_phone}
     </Dial>
     <Say voice="Polly.Joanna">${vmGreeting}</Say>
-    <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" recordingStatusCallback="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
+    <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
     <Say voice="Polly.Joanna">We did not receive a recording. Goodbye.</Say>
   </Response>`);
 });
@@ -760,7 +762,8 @@ async function checkTrials() {
     const { rows } = await pool.query('SELECT * FROM users WHERE paid=FALSE');
     for (const user of rows) {
       if (!user.trial_ends_at) continue;
-      const daysLeft = Math.ceil((new Date(user.trial_ends_at) - Date.now()) / 86400000);
+      const daysLeftRaw = Math.ceil((new Date(user.trial_ends_at) - Date.now()) / 86400000);
+      const daysLeft = daysLeftRaw < 0 ? 0 : daysLeftRaw;
       if ([7,1,0].includes(daysLeft) && user.last_trial_notification !== daysLeft) {
         await sendTrialEmail(user, daysLeft);
         await pool.query('UPDATE users SET last_trial_notification=$1 WHERE id=$2', [daysLeft, user.id]);
