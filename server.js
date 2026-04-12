@@ -133,8 +133,6 @@ async function initDB() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
-  ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_status TEXT DEFAULT 'pending';
-  ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_notified BOOLEAN DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id),
@@ -900,22 +898,20 @@ async function checkTrials() {
 setInterval(checkTrials, 60*60*1000);
 setTimeout(checkTrials, 8000);
 
+
 // ── TFV STATUS POLLER ──
-// Runs hourly — checks if any pending numbers got approved and emails the customer
+// Runs hourly — checks pending numbers and emails customer on approval
 async function checkTFVStatus() {
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_status = 'pending' OR tfv_status IS NULL) AND tfv_notified = FALSE"
+      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND tfv_notified IS NOT TRUE"
     );
     if (!rows.length) return;
-
     const SID = process.env.TWILIO_ACCOUNT_SID;
     const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
     const auth = 'Basic ' + Buffer.from(`${SID}:${TTOKEN}`).toString('base64');
-
     for (const user of rows) {
       try {
-        // Query Twilio for verification status of this number
         const encoded = encodeURIComponent(user.twilio_number);
         const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encoded}`, {
           headers: { 'Authorization': auth }
@@ -923,46 +919,32 @@ async function checkTFVStatus() {
         const d = await r.json();
         const verification = d.verifications?.[0];
         if (!verification) continue;
-
-        const status = verification.status; // PENDING_REVIEW, IN_REVIEW, TWILIO_APPROVED, TWILIO_REJECTED
-
-        // Update status in DB
-        await pool.query('UPDATE users SET tfv_status=$1 WHERE id=$2', [status, user.id]);
-
-        if (status === 'TWILIO_APPROVED' && !user.tfv_notified) {
-          console.log(`TFV approved for ${user.twilio_number} (${user.email}) — sending verified email`);
+        const status = verification.status;
+        if (status === 'TWILIO_APPROVED') {
+          console.log(`TFV approved: ${user.twilio_number} → emailing ${user.email}`);
           await sendVerifiedEmail(user);
           await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-        } else if (status === 'TWILIO_REJECTED' && !user.tfv_notified) {
-          console.log(`TFV rejected for ${user.twilio_number} (${user.email})`);
-          // Email user that there was an issue — we'll follow up
+        } else if (status === 'TWILIO_REJECTED') {
+          console.log(`TFV rejected: ${user.twilio_number}`);
           if (process.env.SENDGRID_API_KEY) {
             await sgMail.send({
-              to: user.email,
-              from: 'hello@calllocally.com',
+              to: user.email, from: 'hello@calllocally.com',
               subject: 'Action needed: your CallLocally number verification',
               html: `<div style="font-family:sans-serif;max-width:480px">
                 <h2 style="color:#FF5C1A">Verification needs attention</h2>
                 <p>Hey ${user.name}, there was an issue verifying your CallLocally number <b>${user.twilio_number}</b>.</p>
-                <p>Our team will reach out within 1 business day to get this sorted. No action needed from you right now.</p>
-                <p style="font-size:13px;color:#999">Questions? Reply to this email.</p>
+                <p>Our team will reach out within 1 business day. No action needed from you right now.</p>
               </div>`
-            }).catch(e => console.error('TFV rejection email error:', e.message));
+            }).catch(e => console.error('TFV rejection email:', e.message));
           }
           await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
         }
-      } catch(e) {
-        console.error(`TFV check error for ${user.twilio_number}:`, e.message);
-      }
+      } catch(e) { console.error(`TFV check error for ${user.twilio_number}:`, e.message); }
     }
-  } catch(e) {
-    console.error('TFV poller error:', e.message);
-  }
+  } catch(e) { console.error('TFV poller error:', e.message); }
 }
-
-setInterval(checkTFVStatus, 60*60*1000); // every hour
-setTimeout(checkTFVStatus, 15000); // also run 15s after startup
-
+setInterval(checkTFVStatus, 60*60*1000);
+setTimeout(checkTFVStatus, 15000);
 
 // ── ANALYTICS: Admin overview of all users + funnel ──
 app.get('/api/admin/analytics', async (req, res) => {
