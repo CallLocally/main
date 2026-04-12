@@ -75,11 +75,13 @@ async function initDB() {
       stripe_subscription_id TEXT,
       last_trial_notification INT,
       total_leads INT DEFAULT 0,
-      total_urgent INT DEFAULT 0
+      total_urgent INT DEFAULT 0,
+      carrier TEXT DEFAULT 'other'
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS team_phones JSONB DEFAULT '[]';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id),
@@ -184,7 +186,7 @@ async function requireAuth(req, res, next) {
 
 // ── SIGNUP ──
 app.post('/api/signup', signupLimiter, async (req, res) => {
-  const { name, email, businessName, businessPhone, trade } = req.body;
+  const { name, email, businessName, businessPhone, trade, carrier } = req.body;
   if (!name || !email || !businessName || !businessPhone)
     return res.status(400).json({ error: 'All fields required' });
 
@@ -214,17 +216,17 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     const trialEndsAt = new Date(Date.now() + 14*24*60*60*1000);
 
     await pool.query(`
-      INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at, carrier)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     `, [
       userId, authToken, name.slice(0,100), cleanEmail, businessName.slice(0,200),
-      formattedPhone, trade||'general', purchased.phoneNumber,
+      formattedPhone, trade||'general', purchased.phoneNumber, carrier||'other', carrier||'other',
       null, // will use trade-specific default via getTradeMessage at call time
       null, // will use trade-specific default via getTradeMessage at call time
-      trialEndsAt,
+      trialEndsAt, carrier||'other',
     ]);
 
-    await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId });
+    await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, carrier: carrier||'other' });
     console.log(`Signup: ${businessName} → ${purchased.phoneNumber}`);
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
   } catch(err) {
@@ -340,6 +342,71 @@ app.post('/api/stripe-webhook', async (req, res) => {
   res.json({ received: true });
 });
 
+
+// ── VOICEMAIL RECORDING COMPLETE ──
+app.post('/api/voicemail', async (req, res) => {
+  const { RecordingUrl, RecordingDuration, Called, Caller, RecordingSid } = req.body;
+  if (!RecordingUrl || !Called) return res.status(200).send('OK');
+
+  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [Called]);
+  const user = rows[0];
+  if (!user || !isActive(user)) return res.status(200).send('OK');
+
+  const duration = parseInt(RecordingDuration) || 0;
+  if (duration < 2) return res.status(200).send('OK'); // skip accidental beep recordings
+
+  // Insert lead for voicemail if no existing waiting lead from this caller
+  const existingLead = await pool.query(`
+    SELECT id FROM leads WHERE user_id=$1 AND caller_phone=$2 AND status='waiting'
+    AND created_at > NOW() - INTERVAL '10 minutes'
+  `, [user.id, Caller]);
+
+  if (!existingLead.rows.length) {
+    await pool.query(`
+      INSERT INTO leads (id, user_id, caller_phone, after_hours, status, service)
+      VALUES ($1,$2,$3,$4,'captured','Voicemail left')
+    `, [uuidv4(), user.id, Caller, !isBusinessHours(user)]);
+    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
+  } else {
+    await pool.query(`
+      UPDATE leads SET status='captured', captured_at=NOW(), service='Voicemail left'
+      WHERE id=$1
+    `, [existingLead.rows[0].id]);
+  }
+
+  // Notify contractor via SMS
+  const durMins = Math.floor(duration/60);
+  const durSecs = duration % 60;
+  const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
+  const sms = `📱 Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
+  try {
+    await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: user.business_phone });
+    if (user.plan === 'team' && Array.isArray(user.team_phones)) {
+      for (const phone of user.team_phones) {
+        try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: phone }); } catch(e) {}
+      }
+    }
+  } catch(e) { console.error('Voicemail SMS:', e.message); }
+
+  // Email with playback link
+  if (process.env.SENDGRID_API_KEY && user.email) {
+    try {
+      await sgMail.send({
+        to: user.email, from: 'hello@calllocally.com',
+        subject: `📱 Voicemail from ${Caller} (${durStr})`,
+        html: `<div style="font-family:sans-serif;max-width:480px">
+          <h2 style="color:#FF5C1A">New Voicemail</h2>
+          <p><b>From:</b> ${Caller}</p>
+          <p><b>Duration:</b> ${durStr}</p>
+          <a href="${RecordingUrl}.mp3" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">▶ Play Voicemail</a>
+          <p style="margin-top:16px;font-size:13px;color:#888">You can also call back: <a href="tel:${Caller}">${Caller}</a></p>
+        </div>`,
+      });
+    } catch(e) { console.error('Voicemail email:', e.message); }
+  }
+  res.status(200).send('OK');
+});
+
 // ── CALL FORWARDING ──
 app.get('/api/forward', async (req, res) => {
   const calledNum = req.query.To || req.body?.To;
@@ -347,7 +414,17 @@ app.get('/api/forward', async (req, res) => {
   const user = rows[0];
   res.set('Content-Type', 'text/xml');
   if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
-  res.send(`<?xml version="1.0"?><Response><Dial timeout="15" statusCallback="${RAILWAY_URL}/api/call-status" statusCallbackEvent="completed,no-answer,busy,failed" statusCallbackMethod="POST">${user.business_phone}</Dial></Response>`);
+  const vmGreeting = user.custom_message
+      ? `Please leave a message or text this number your service need and address.`
+      : `Hi, you've reached ${user.business_name}. We're on a job right now. Please leave a voicemail, or text this number your service need and address and we'll call you right back.`;
+  res.send(`<?xml version="1.0"?><Response>
+    <Dial timeout="18" statusCallback="${RAILWAY_URL}/api/call-status" statusCallbackEvent="completed,no-answer,busy,failed" statusCallbackMethod="POST">
+      ${user.business_phone}
+    </Dial>
+    <Say voice="Polly.Joanna">${vmGreeting}</Say>
+    <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" recordingStatusCallback="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
+    <Say voice="Polly.Joanna">We did not receive a recording. Goodbye.</Say>
+  </Response>`);
 });
 
 // ── CALL STATUS → SMS (Twilio-validated) ──
@@ -494,30 +571,80 @@ async function sendWelcomeEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   const num = user.twilioNumber;
   const digits = num.replace('+','').replace(/\D/g,'');
-  const dialCode = `*61*${digits}#`;
+  const carrier = (user.carrier || 'other').toLowerCase();
+
+  // Carrier-specific forwarding codes and instructions
+  const carrierInstructions = {
+    tmobile: {
+      name: 'T-Mobile',
+      dialCode: `**61*${digits}#`,
+      note: 'T-Mobile uses a slightly different format.',
+      extra: '<p style="font-size:13px;color:#888;margin-top:8px">T-Mobile tip: If this doesn\'t work, call <b>611</b> from your phone and say "Set up call forwarding when unanswered to ' + num + '". Takes 2 minutes.</p>'
+    },
+    att: {
+      name: 'AT&T',
+      dialCode: `*61*${digits}**18#`,
+      note: null,
+      extra: ''
+    },
+    verizon: {
+      name: 'Verizon',
+      dialCode: `*71${digits}`,
+      note: null,
+      extra: ''
+    },
+    other: {
+      name: 'your carrier',
+      dialCode: `*61*${digits}**18#`,
+      note: null,
+      extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this code doesn\'t work for your carrier, text us at hello@calllocally.com and we\'ll send you the right one.</p>'
+    }
+  };
+
+  const ci = carrierInstructions[carrier] || carrierInstructions.other;
+  const dialCode = ci.dialCode;
+
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
       subject: "You're live on CallLocally — one step left",
-      html: `<div style="font-family:sans-serif;max-width:520px">
+      html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
         <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
-        <p>Your toll-free CallLocally number:</p>
-        <p style="font-size:32px;font-weight:700;color:#FF5C1A">${num}</p>
-        <hr>
-        <h3>Forward unanswered calls (2 min)</h3>
-        <p><b>iPhone:</b> Settings → Phone → Call Forwarding → On → ${num}</p>
-        <p><b>Android:</b> Phone → ⋮ → Settings → Forward when unanswered → ${num}</p>
-        <p><b>Fastest — dial:</b> <code>${dialCode}</code></p>
-        <p style="background:#fff8f5;border-left:3px solid #FF5C1A;padding:12px;font-size:13px">
-          <b>Important:</b> Set forwarding to <b>unanswered calls only</b>, not all calls.
-        </p>
-        <hr>
-        <p>Dashboard: <a href="https://calllocally.com/dashboard">calllocally.com/dashboard</a></p>
-        <p style="color:#999;font-size:13px">Questions? hello@calllocally.com</p>
+        <p style="font-size:16px">Your CallLocally number is ready:</p>
+        <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
+        <p style="color:#555;font-size:14px">Callers can text or leave a voicemail at this number. Both get delivered to you instantly.</p>
+
+        <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+
+        <h3 style="margin-bottom:8px">Last step — forward your unanswered calls</h3>
+        <p style="color:#555;margin-bottom:20px;font-size:14px">Dial the code below from your ${ci.name} phone and press <b>Call</b>. Your phone still rings normally — if you don't pick up, the caller can leave a voicemail <i>or</i> text back. Either way, you get notified instantly.</p>
+
+        <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
+          <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#FF5C1A;margin-bottom:10px">Dial this on your ${ci.name} phone</p>
+          <p style="font-size:32px;font-weight:700;font-family:monospace;color:#1a1a1a;letter-spacing:3px;margin:0">${dialCode}</p>
+          <p style="font-size:13px;color:#888;margin-top:10px">Then press <b>Call</b>. Done.</p>
+          ${ci.extra}
+        </div>
+
+        <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
+          <p style="font-size:13px;color:#555;margin:0">
+            <b>How it works after setup:</b><br>
+            1. Customer calls your real number → rings you for 18 seconds<br>
+            2. If no answer → they hear a voicemail greeting<br>
+            3. They can leave a voicemail <b>or</b> reply via text<br>
+            4. You get the voicemail recording + text transcript sent to your phone immediately<br><br>
+            <b>To turn off forwarding later:</b> Dial <code>##61#</code> and press Call.
+          </p>
+        </div>
+
+        <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+        <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard" style="color:#FF5C1A">calllocally.com/dashboard</a></p>
+        <p style="font-size:13px;color:#999">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
   } catch(e) { console.error('Welcome email:', e.message); }
 }
+
 async function sendUpgradeEmail(user, plan) {
   if (!process.env.SENDGRID_API_KEY) return;
   const planName = PLANS[plan]?.name||plan;
