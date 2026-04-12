@@ -1,56 +1,3 @@
-// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
-async function submitTollFreeVerification(user) {
-  const TSID = process.env.TWILIO_ACCOUNT_SID;
-  const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
-  const nameParts = (user.name || 'Owner').trim().split(' ');
-  const firstName = nameParts[0] || 'Owner';
-  const lastName = nameParts.slice(1).join(' ') || firstName;
-  const biz = user.businessName || user.business_name || user.name;
-
-  const body = new URLSearchParams({
-    TollfreePhoneNumberSid: user.phoneSid,
-    NotificationEmail: user.email,
-    BusinessName: biz,
-    BusinessWebsite: 'https://calllocally.com',
-    BusinessStreetAddress: '1234 Main St',
-    BusinessCity: 'Los Angeles',
-    BusinessStateProvinceRegion: 'CA',
-    BusinessPostalCode: '90001',
-    BusinessCountry: 'US',
-    BusinessType: 'SOLE_PROPRIETOR',
-    BusinessContactFirstName: firstName,
-    BusinessContactLastName: lastName,
-    BusinessContactEmail: user.email,
-    BusinessContactPhone: user.twilioNumber,
-    UseCaseCategories: 'ACCOUNT_NOTIFICATIONS',
-    UseCaseSummary: `CallLocally sends automated SMS to missed callers on behalf of ${biz}, a home service contractor. When a customer calls and gets no answer, CallLocally texts them to capture their service need and address. The contractor receives lead details via SMS and email. No marketing messages.`,
-    ProductionMessageSample: `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
-    OptInType: 'VERBAL',
-    OptInImageUrls: 'https://calllocally.com',
-    MessageVolume: '10',
-    AdditionalInformation: 'Automated lead capture for home service contractors. Callers opt in by calling the business number.',
-  });
-
-  try {
-    const r = await fetch('https://messaging.twilio.com/v1/Tollfree/Verifications', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(`${TSID}:${TTOKEN}`).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
-    const d = await r.json();
-    if (d.sid) {
-      console.log(`TFV submitted for ${user.twilioNumber}: ${d.sid} status=${d.status}`);
-    } else {
-      console.error(`TFV failed for ${user.twilioNumber}:`, JSON.stringify(d));
-    }
-  } catch(e) {
-    console.error('TFV submission error:', e.message);
-  }
-}
-
 const express = require('express');
 const twilio = require('twilio');
 const sgMail = require('@sendgrid/mail');
@@ -278,6 +225,8 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     ]);
 
     await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, carrier: carrier||'other' });
+    // Auto-submit toll-free verification — fire and forget, non-blocking
+    submitTollFreeVerification({ name, email: cleanEmail, businessName, business_name: businessName, twilioNumber: purchased.phoneNumber, phoneSid: purchased.sid }).catch(e => console.error('TFV error:', e.message));
     console.log(`Signup: ${businessName} → ${purchased.phoneNumber}`);
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
   } catch(err) {
