@@ -69,30 +69,16 @@ app.post('/api/signup', async (req, res) => {
   const formattedPhone = formatPhone(businessPhone);
   const areaCode = formattedPhone.slice(2,5);
   try {
-    let twilioNumber = null;
-    try {
-      const avail = await client.availablePhoneNumbers('US').local.list({ areaCode, limit: 1 });
-      if (avail.length) {
-        const p = await client.incomingPhoneNumbers.create({
-          phoneNumber: avail[0].phoneNumber,
-          voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'GET',
-          statusCallback: `${RAILWAY_URL}/api/call-status`, statusCallbackMethod: 'POST',
-          smsUrl: `${RAILWAY_URL}/api/twilio/sms`, smsMethod: 'POST',
-        });
-        twilioNumber = p.phoneNumber;
-      }
-    } catch(e) { console.log('Area code failed:', e.message); }
-    if (!twilioNumber) {
-      const avail = await client.availablePhoneNumbers('US').local.list({ limit: 1 });
-      if (!avail.length) throw new Error('No numbers available');
-      const p = await client.incomingPhoneNumbers.create({
-        phoneNumber: avail[0].phoneNumber,
-        voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'GET',
-        statusCallback: `${RAILWAY_URL}/api/call-status`, statusCallbackMethod: 'POST',
-        smsUrl: `${RAILWAY_URL}/api/twilio/sms`, smsMethod: 'POST',
-      });
-      twilioNumber = p.phoneNumber;
-    }
+    // Toll-free: one A2P registration covers ALL contractor numbers
+    const tfAvail = await client.availablePhoneNumbers('US').tollFree.list({ limit: 1 });
+    if (!tfAvail.length) throw new Error('No toll-free numbers available');
+    const tfPurchased = await client.incomingPhoneNumbers.create({
+      phoneNumber: tfAvail[0].phoneNumber,
+      voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'GET',
+      statusCallback: `${RAILWAY_URL}/api/call-status`, statusCallbackMethod: 'POST',
+      smsUrl: `${RAILWAY_URL}/api/twilio/sms`, smsMethod: 'POST',
+    });
+    const twilioNumber = tfPurchased.phoneNumber;
     const userId = `user_${Date.now()}`;
     db.users[userId] = {
       id: userId, name, email: email.toLowerCase(), businessName,
@@ -348,12 +334,13 @@ async function notifyContractor(user, lead) {
 async function sendWelcomeEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   const num = user.twilioNumber;
-  const dialCode = `*61*${num.replace('+','').replace(/\D/g,'')}#`;
+  const digits = num.replace('+','').replace(/\D/g,'');
+  const dialCode = `*61*${digits}#`;
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
       subject: "You're live on CallLocally — one step left",
-      html: `<div style="font-family:sans-serif;max-width:520px"><h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2><p>Your CallLocally number:</p><p style="font-size:28px;font-weight:700;letter-spacing:2px">${num}</p><hr><h3>Forward your unanswered calls (2 min)</h3><p><b>iPhone:</b> Settings → Phone → Call Forwarding → On → <code>${num}</code></p><p><b>Android:</b> Phone → ⋮ → Settings → Supplementary services → Forward when unanswered → <code>${num}</code></p><p><b>Fastest — dial this on any phone:</b> <code>${dialCode}</code></p><hr><p>View your leads at <a href="https://calllocally.com/dashboard">calllocally.com/dashboard</a></p><p>Questions? hello@calllocally.com</p></div>`,
+      html: `<div style="font-family:sans-serif;max-width:520px"><h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2><p>Your CallLocally number:</p><p style="font-size:28px;font-weight:700;letter-spacing:2px">${num}</p><hr><h3>Forward your unanswered calls (2 min)</h3><p><b>iPhone:</b> Settings → Phone → Call Forwarding → On → <code>${num}</code></p><p><b>Android:</b> Phone → ⋮ → Settings → Supplementary services → Forward when unanswered → <code>${num}</code></p><p><b>⚡ Fastest — dial this on your phone:</b> <code>${dialCode}</code> then press call.</p><p style='margin-top:12px;padding:12px;background:#fff8f5;border-left:3px solid #FF5C1A;font-size:13px'><b>Important:</b> Set forwarding to <b>unanswered calls only</b> — not all calls. This way personal calls you answer aren't affected.</p><hr><p>View your leads at <a href="https://calllocally.com/dashboard">calllocally.com/dashboard</a></p><p>Questions? hello@calllocally.com</p></div>`,
     });
   } catch(e) { console.error('Welcome email:', e.message); }
 }
