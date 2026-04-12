@@ -128,7 +128,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="trial-label">Free Trial</div>
         <div class="trial-days" id="trialDays">14</div>
         <div class="trial-sub">days remaining</div>
-        <button class="upgrade-btn" onclick="alert('Stripe coming soon!')">Upgrade Plan</button>
+        <button class="upgrade-btn" onclick="handleUpgrade()">Upgrade Plan</button>
       </div>
     </div>
   </aside>
@@ -282,6 +282,15 @@ function populateSettings() {
 }
 
 function updateTrialDays() {
+  if (currentUser.paid && currentUser.plan) {
+    document.getElementById('trialDays').textContent = currentUser.plan.charAt(0).toUpperCase() + currentUser.plan.slice(1);
+    document.querySelector('.trial-label').textContent = 'Active Plan';
+    document.querySelector('.trial-sub').textContent = 'Subscription active';
+    document.querySelector('.upgrade-btn').textContent = 'Manage Billing';
+    document.querySelector('.upgrade-btn').onclick = handleBillingPortal;
+    return;
+  }
+
   if (!currentUser.trialEndsAt) return;
   document.getElementById('trialDays').textContent = Math.max(0, Math.ceil((new Date(currentUser.trialEndsAt)-Date.now())/86400000));
 }
@@ -306,6 +315,76 @@ function switchView(name) {
   document.getElementById('view-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
   document.getElementById('topbarTitle').textContent = name.charAt(0).toUpperCase()+name.slice(1);
+}
+
+async function handleUpgrade() {
+  // Show plan picker modal
+  const plan = await showPlanPicker();
+  if (!plan) return;
+  const btn = document.querySelector('.upgrade-btn');
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('https://main-production-147d.up.railway.app/api/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser.id, plan })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      alert('Error: ' + (d.error || 'Could not create checkout'));
+      btn.textContent = 'Upgrade Plan';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error. Please try again.');
+    btn.textContent = 'Upgrade Plan';
+    btn.disabled = false;
+  }
+}
+
+async function handleBillingPortal() {
+  const r = await fetch('https://main-production-147d.up.railway.app/api/billing-portal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: currentUser.id })
+  });
+  const d = await r.json();
+  if (d.url) window.location.href = d.url;
+}
+
+function showPlanPicker() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `<div style="background:#13171D;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;max-width:480px;width:100%">
+      <h2 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:#fff;margin-bottom:8px">Choose your plan</h2>
+      <p style="color:#7A8090;font-size:14px;margin-bottom:24px">Your trial days will carry over — you won't be charged until your trial ends.</p>
+      <div style="display:grid;gap:12px">
+        <button onclick="window._planChoice='solo'" style="background:rgba(255,92,26,0.08);border:2px solid rgba(255,92,26,0.3);border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
+          <div style="font-weight:700;font-size:16px">Solo <span style="float:right;color:#FF5C1A">$49/mo</span></div>
+          <div style="font-size:13px;color:#7A8090;margin-top:4px">1 user · Unlimited leads · SMS + email delivery</div>
+        </button>
+        <button onclick="window._planChoice='growth'" style="background:rgba(255,92,26,0.15);border:2px solid #FF5C1A;border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
+          <div style="font-weight:700;font-size:16px">Growth ⭐ <span style="float:right;color:#FF5C1A">$79/mo</span></div>
+          <div style="font-size:13px;color:#7A8090;margin-top:4px">Everything in Solo + after-hours mode + priority support</div>
+        </button>
+        <button onclick="window._planChoice='team'" style="background:rgba(255,92,26,0.08);border:2px solid rgba(255,92,26,0.3);border-radius:12px;padding:16px;text-align:left;cursor:pointer;width:100%;color:#fff">
+          <div style="font-weight:700;font-size:16px">Team <span style="float:right;color:#FF5C1A">$129/mo</span></div>
+          <div style="font-size:13px;color:#7A8090;margin-top:4px">Everything in Growth + multi-member delivery + dispatcher mode</div>
+        </button>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px">
+        <button onclick="window._planResolve(window._planChoice)" style="flex:1;background:#FF5C1A;color:white;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Continue →</button>
+        <button onclick="window._planResolve(null)" style="background:rgba(255,255,255,0.05);color:#7A8090;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:13px 20px;font-size:15px;cursor:pointer;font-family:inherit">Cancel</button>
+      </div>
+    </div>`;
+    window._planChoice = 'growth';
+    window._planResolve = (val) => { document.body.removeChild(overlay); resolve(val); };
+    document.body.appendChild(overlay);
+  });
 }
 
 function fmt(num) {
