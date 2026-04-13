@@ -15,6 +15,7 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+app.set('trust proxy', 1); // Railway runs behind a proxy
 
 // ── SECURITY MIDDLEWARE ──
 app.use(helmet({ contentSecurityPolicy: false }));
