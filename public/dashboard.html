@@ -321,6 +321,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 </div>
 
 <script>
+  // Auto-login from email link: save URL params to localStorage if present
+  (function() {
+    const p = new URLSearchParams(window.location.search);
+    const uid = p.get('userId');
+    const tok = p.get('token');
+    if (uid && tok) {
+      localStorage.setItem('userId', uid);
+      localStorage.setItem('authToken', tok);
+    }
+  })();
+  
 const API = 'https://calllocally.com';
 let currentUser = null;
 let currentToken = null;
