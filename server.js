@@ -427,6 +427,15 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
     `, [existingLead.rows[0].id]);
   }
 
+  // Text the CALLER to confirm we got their voicemail
+  try {
+    await twilioClient.messages.create({
+      body: `Thanks for reaching out to ${user.business_name}! We received your voicemail and someone will call you back shortly.`,
+      from: user.twilio_number,
+      to: Caller
+    });
+  } catch(e) { console.error('Caller confirmation SMS error:', e.message); }
+
   // Notify contractor via SMS
   const durMins = Math.floor(duration/60);
   const durSecs = duration % 60;
