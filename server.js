@@ -138,7 +138,7 @@ async function initDB() {
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id),
       caller_phone TEXT NOT NULL,
-      status TEXT DEFAULT 'waiting',
+      status TEXT DEFAULT 'pending',
       service TEXT,
       address TEXT,
       urgent BOOLEAN DEFAULT FALSE,
@@ -158,6 +158,11 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS users_stripe_sub_idx ON users(stripe_subscription_id);
   `);
   console.log('DB initialized');
+}
+
+function getSenderNumber(user) {
+  if (user.tfv_notified === true || user.tfv_status === 'TWILIO_APPROVED') return user.twilio_number;
+  return process.env.ADMIN_TWILIO_NUMBER || '+19497968059';
 }
 
 function formatPhone(raw) {
@@ -199,7 +204,8 @@ function isActive(user) {
   if (user.paid) return true;
   if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
   if (user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  if (!user.trial_ends_at && !user.paid) return true; // Verification pending — treat as active
+  // Pending verification = active. But if tfv_notified (approved or rejected) and no trial = not active.
+  if (!user.trial_ends_at && !user.paid && user.tfv_notified !== true) return true;
   return false;
 }
 function isBusinessHours(user) {
@@ -514,10 +520,10 @@ app.post('/api/dial-complete', async (req, res) => {
   const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
   try {
     await twilioClient.messages.create({ body: message, from: getSenderNumber(user), to: callerNum });
-    await pool.query('INSERT INTO leads (id, user_id, caller_phone, after_hours) VALUES ($1,$2,$3,$4)',
+    await pool.query(`INSERT INTO leads (id, user_id, caller_phone, after_hours, status) VALUES ($1,$2,$3,$4,'pending') ON CONFLICT DO NOTHING`,
       [uuidv4(), user.id, callerNum, isAH]);
-    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
-    console.log(`Lead captured: ${callerNum} → ${user.business_name}`);
+    // total_leads NOT incremented yet — only counts when customer replies
+    console.log(`Lead SMS sent (pending reply): ${callerNum} → ${user.business_name}`);
   } catch(e) { console.error('Lead SMS error:', e.message); }
 
   // Play voicemail greeting and record
@@ -572,7 +578,7 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
   const leadRes = await pool.query(`
     SELECT l.*, u.* FROM leads l
     JOIN users u ON l.user_id = u.id
-    WHERE l.caller_phone=$1 AND l.status='waiting' AND u.twilio_number=$2
+    WHERE l.caller_phone=$1 AND l.status='pending' AND u.twilio_number=$2
     ORDER BY l.created_at DESC LIMIT 1
   `, [From, To]);
 
