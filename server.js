@@ -596,6 +596,7 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
       WHERE id=$5
     `, [urgent||row.urgent, Body.slice(0,500), addrMatch?addrMatch[0]:row.address, JSON.stringify(conversation), row.id]);
 
+    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [row.user_id]);
     await notifyContractor(row, { ...row, urgent: urgent||row.urgent, service: row.service||Body, address: addrMatch?addrMatch[0]:row.address });
     reply = urgent ? `Got it — urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
   }
@@ -724,7 +725,7 @@ async function sendWelcomeEmail(user) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: "You're live on CallLocally — one step left",
+      subject: "You're signed up! Your CallLocally number is being verified",
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
         <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
         <p style="font-size:16px">Your CallLocally number is ready:</p>
