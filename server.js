@@ -133,6 +133,7 @@ async function initDB() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_notified BOOLEAN DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id),
@@ -426,15 +427,6 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
       WHERE id=$1
     `, [existingLead.rows[0].id]);
   }
-
-  // Text the CALLER to confirm we got their voicemail
-  try {
-    await twilioClient.messages.create({
-      body: `Thanks for reaching out to ${user.business_name}! We received your voicemail and someone will call you back shortly.`,
-      from: user.twilio_number,
-      to: Caller
-    });
-  } catch(e) { console.error('Caller confirmation SMS error:', e.message); }
 
   // Notify contractor via SMS
   const durMins = Math.floor(duration/60);
