@@ -756,7 +756,7 @@ async function sendWelcomeEmail(user) {
         </div>
 
         <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-        <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard" style="color:#FF5C1A">calllocally.com/dashboard</a></p>
+        <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard?userId=${user.id}&token=${user.auth_token || user.authToken}" style="color:#FF5C1A">calllocally.com/dashboard →</a></p>
         <p style="font-size:13px;color:#999">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
@@ -884,7 +884,7 @@ async function sendVerifiedEmail(user) {
           </p>
         </div>
 
-        <a href="https://calllocally.com/dashboard" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
+        <a href="https://calllocally.com/dashboard?userId=${user.id}&token=${user.auth_token}" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
         <p style="font-size:13px;color:#999;margin-top:16px">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
