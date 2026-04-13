@@ -1,4 +1,306 @@
-// ── TOLL-FREE VERIFICATION (auto-submit on signup) ──
+// ══════════════════════════════════════════════════════════════════════════════
+// CallLocally — server.js (FIXED)
+// All audit fixes applied. See FIX comments throughout.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const express = require('express');
+const twilio = require('twilio');
+const sgMail = require('@sendgrid/mail');
+const { Pool } = require('pg');
+const { v4: uuidv4 } = require('uuid');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+
+// ── SECURITY MIDDLEWARE ──
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: ['https://calllocally.com', 'https://main-production-147d.up.railway.app'] }));
+
+// Stripe webhook needs raw body — must be before express.json()
+app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }));
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
+// ── RATE LIMITING ──
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 5,
+  message: { error: 'Too many signups from this IP, try again later' },
+  standardHeaders: true, legacyHeaders: false,
+});
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 100,
+  standardHeaders: true, legacyHeaders: false,
+});
+
+// FIX [2f]: Separate rate limiter for Twilio webhooks — much higher ceiling
+// so legitimate call bursts don't get blocked, but still prevents abuse
+const twilioWebhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 1000,
+  standardHeaders: true, legacyHeaders: false,
+  message: '<?xml version="1.0"?><Response><Say>Service temporarily unavailable.</Say></Response>',
+});
+
+// Only apply apiLimiter to non-webhook API routes
+// FIX [2f]: Don't apply the tight 100/15min limiter to Twilio webhook endpoints
+app.use('/api/signup', signupLimiter);
+app.use('/api/leads', apiLimiter);
+app.use('/api/user', apiLimiter);
+app.use('/api/admin', apiLimiter);
+app.use('/api/create-checkout', apiLimiter);
+app.use('/api/billing-portal', apiLimiter);
+
+const RAILWAY_URL = process.env.RAILWAY_URL || 'https://calllocally.com';
+const ADMIN_TWILIO_NUMBER = process.env.ADMIN_TWILIO_NUMBER || '+19497968059';
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+const PLANS = {
+  solo:   { name: 'Solo',   price: 4900,  priceId: process.env.STRIPE_PRICE_SOLO },
+  growth: { name: 'Growth', price: 7900,  priceId: process.env.STRIPE_PRICE_GROWTH },
+  team:   { name: 'Team',   price: 12900, priceId: process.env.STRIPE_PRICE_TEAM },
+};
+
+// ── POSTGRES ──
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+// FIX [7d]: Global error handlers to prevent silent crashes
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
+  // Don't exit — Railway will restart, but we lose in-flight requests
+  // In production, you'd want to drain and restart gracefully
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      auth_token TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      business_name TEXT NOT NULL,
+      business_phone TEXT NOT NULL,
+      trade TEXT DEFAULT 'general',
+      twilio_number TEXT,
+      custom_message TEXT,
+      after_hours_message TEXT,
+      business_hours JSONB,
+      timezone TEXT DEFAULT 'America/Los_Angeles',
+      team_phones JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      trial_ends_at TIMESTAMPTZ,
+      plan TEXT,
+      paid BOOLEAN DEFAULT FALSE,
+      paid_through TIMESTAMPTZ,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      last_trial_notification INT,
+      total_leads INT DEFAULT 0,
+      total_urgent INT DEFAULT 0,
+      carrier TEXT DEFAULT 'other',
+      tfv_notified BOOLEAN DEFAULT FALSE,
+      tfv_submission_failed BOOLEAN DEFAULT FALSE
+    );
+    -- Safe migrations for existing DBs
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS team_phones JSONB DEFAULT '[]';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_notified BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_submission_failed BOOLEAN DEFAULT FALSE;
+
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
+      caller_phone TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      service TEXT,
+      address TEXT,
+      urgent BOOLEAN DEFAULT FALSE,
+      after_hours BOOLEAN DEFAULT FALSE,
+      conversation JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      captured_at TIMESTAMPTZ,
+      sent_from TEXT
+    );
+    -- FIX [3/6a]: Add sent_from column to track which number the SMS was sent from
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS sent_from TEXT;
+
+    CREATE TABLE IF NOT EXISTS processed_stripe_events (
+      event_id TEXT PRIMARY KEY,
+      processed_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Indexes
+    CREATE INDEX IF NOT EXISTS leads_user_id_idx ON leads(user_id);
+    CREATE INDEX IF NOT EXISTS leads_caller_idx ON leads(caller_phone, status);
+    CREATE INDEX IF NOT EXISTS users_twilio_idx ON users(twilio_number);
+    CREATE INDEX IF NOT EXISTS users_stripe_customer_idx ON users(stripe_customer_id);
+    CREATE INDEX IF NOT EXISTS users_stripe_sub_idx ON users(stripe_subscription_id);
+
+    -- FIX [6a]: Partial unique index to prevent duplicate pending leads per caller per contractor
+    CREATE UNIQUE INDEX IF NOT EXISTS leads_pending_dedup_idx
+      ON leads(user_id, caller_phone) WHERE status = 'pending';
+
+    -- FIX [6c]: Better composite index for the SMS reply lookup
+    CREATE INDEX IF NOT EXISTS leads_caller_status_created_idx
+      ON leads(caller_phone, status, created_at DESC);
+
+    -- FIX [6e]: Clean up old processed Stripe events (older than 90 days)
+    DELETE FROM processed_stripe_events WHERE processed_at < NOW() - INTERVAL '90 days';
+  `);
+  console.log('DB initialized');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function getSenderNumber(user) {
+  // FIX [1f]: Removed dead reference to user.tfv_status (column doesn't exist)
+  if (user.tfv_notified === true) return user.twilio_number;
+  return ADMIN_TWILIO_NUMBER;
+}
+
+function formatPhone(raw) {
+  const d = raw.replace(/\D/g, '');
+  return d.startsWith('1') ? `+${d}` : `+1${d}`;
+}
+
+// ── CARRIER FORWARDING CODES ──
+// FIX [1g]: Single source of truth for carrier forwarding codes
+function getCarrierInstructions(carrier, twilioNumber) {
+  const digits = twilioNumber.replace('+', '').replace(/\D/g, '');
+  const num = twilioNumber;
+
+  const instructions = {
+    tmobile: {
+      name: 'T-Mobile',
+      dialCode: `**61*1${digits}#`,
+      extra: `<p style="font-size:13px;color:#888;margin-top:8px">T-Mobile tip: If this doesn't work, call <b>611</b> from your phone and say "Set up call forwarding when unanswered to ${num}". Takes 2 minutes.</p>`
+    },
+    att: {
+      name: 'AT&T',
+      dialCode: `*61*${digits}**18#`,
+      extra: ''
+    },
+    verizon: {
+      name: 'Verizon',
+      dialCode: `*71${digits}`,
+      extra: ''
+    },
+    other: {
+      name: 'your carrier',
+      dialCode: `*61*${digits}**18#`,
+      extra: `<p style="font-size:13px;color:#888;margin-top:8px">If this code doesn't work for your carrier, text us at hello@calllocally.com and we'll send you the right one.</p>`
+    }
+  };
+
+  return instructions[carrier] || instructions.other;
+}
+
+// ── TRADE-SPECIFIC MESSAGES ──
+function getTradeMessage(businessName, trade, afterHours = false) {
+  const biz = businessName;
+  const ah = afterHours;
+  const base = {
+    plumbing:    ah ? `Hi! This is ${biz} — we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
+                    : `Hi! This is ${biz} — we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
+    hvac:        ah ? `Hi! This is ${biz} — we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
+    electrical:  ah ? `Hi! This is ${biz} — we're closed. What's the electrical issue and your address? We call back emergencies 24/7 — reply URGENT if needed.`
+                    : `Hi! This is ${biz} — on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
+    roofing:     ah ? `Hi! This is ${biz} — closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} — missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
+    landscaping: ah ? `Hi! This is ${biz} — closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
+                    : `Hi! This is ${biz} — on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
+    pest:        ah ? `Hi! This is ${biz} — closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
+    handyman:    ah ? `Hi! This is ${biz} — closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
+                    : `Hi! This is ${biz} — on a job. What do you need fixed or built, and what's the address?`,
+    painting:    ah ? `Hi! This is ${biz} — closed for the day. What painting project do you have in mind and what's the address?`
+                    : `Hi! This is ${biz} — missed your call. Interior or exterior painting? And what's the address?`,
+    pool:        ah ? `Hi! This is ${biz} — closed right now. What's the pool issue and your address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} — on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
+    general:     ah ? `Hi! This is ${biz} — we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
+                    : `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
+  };
+  return base[trade] || base.general;
+}
+
+function isActive(user) {
+  if (user.paid) return true;
+  if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
+  if (user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
+  // FIX [1e]: Also check for tfv_submission_failed — don't keep broken users active forever
+  if (!user.trial_ends_at && !user.paid && user.tfv_notified !== true && user.tfv_submission_failed !== true) return true;
+  return false;
+}
+
+function isBusinessHours(user) {
+  if (!user.business_hours) return true;
+  const now = new Date();
+  const tz = user.timezone || 'America/Los_Angeles';
+  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+  const hour = local.getHours();
+  const day = local.getDay();
+  const { startHour = 7, endHour = 20, weekendOn = false } = user.business_hours;
+  if (!weekendOn && (day === 0 || day === 6)) return false;
+  return hour >= startHour && hour < endHour;
+}
+
+// ── TWILIO SIGNATURE VALIDATION ──
+function validateTwilio(req, res, next) {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const signature = req.headers['x-twilio-signature'];
+  const url = `${RAILWAY_URL}${req.originalUrl}`;
+  const isValid = twilio.validateRequest(authToken, signature, url, req.body || {});
+  if (!isValid) {
+    console.warn('Invalid Twilio signature from', req.ip);
+    return res.status(403).send('Forbidden');
+  }
+  next();
+}
+
+// FIX [7b]: Helper to return safe TwiML error response
+function twimlError(res, message = 'Sorry, a system error occurred. Please try again.') {
+  res.set('Content-Type', 'text/xml');
+  return res.send(`<?xml version="1.0"?><Response><Say voice="Polly.Joanna">${message}</Say></Response>`);
+}
+
+// ── DASHBOARD AUTH ──
+// FIX [7a]: Wrap in try/catch so DB errors don't crash the server
+async function requireAuth(req, res, next) {
+  try {
+    const token = req.headers['x-auth-token'] || req.query.token;
+    const userId = req.params.userId || req.query.userId;
+    if (!token || !userId) return res.status(401).json({ error: 'Unauthorized' });
+    const { rows } = await pool.query('SELECT id FROM users WHERE id=$1 AND auth_token=$2', [userId, token]);
+    if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
+    next();
+  } catch (err) {
+    console.error('Auth error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TOLL-FREE VERIFICATION
+// ══════════════════════════════════════════════════════════════════════════════
+
+// FIX [1a]: Single definition — removed duplicate
 async function submitTollFreeVerification(user) {
   const TSID = process.env.TWILIO_ACCOUNT_SID;
   const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -41,225 +343,37 @@ async function submitTollFreeVerification(user) {
     const d = await r.json();
     if (d.sid) {
       console.log(`TFV submitted for ${user.twilioNumber}: ${d.sid} status=${d.status}`);
+      return true;
     } else {
       console.error(`TFV failed for ${user.twilioNumber}:`, JSON.stringify(d));
+      return false;
     }
-  } catch(e) {
+  } catch (e) {
     console.error('TFV submission error:', e.message);
+    return false;
   }
 }
 
-const express = require('express');
-const twilio = require('twilio');
-const sgMail = require('@sendgrid/mail');
-const { Pool } = require('pg');
-const { v4: uuidv4 } = require('uuid');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 
-const app = express();
+// ══════════════════════════════════════════════════════════════════════════════
+// SIGNUP
+// ══════════════════════════════════════════════════════════════════════════════
 
-// ── SECURITY MIDDLEWARE ──
-app.use(helmet({ contentSecurityPolicy: false })); // security headers
-app.use(cors({ origin: ['https://calllocally.com', 'https://main-production-147d.up.railway.app'] }));
-
-// Stripe webhook needs raw body — must be before express.json()
-app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }));
-app.use(express.json({ limit: '10kb' })); // cap payload size
-app.use(express.urlencoded({ extended: false, limit: '10kb' }));
-
-// ── RATE LIMITING ──
-const signupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, max: 5, // 5 signups per IP per hour
-  message: { error: 'Too many signups from this IP, try again later' },
-  standardHeaders: true, legacyHeaders: false,
-});
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 100,
-  standardHeaders: true, legacyHeaders: false,
-});
-app.use('/api/', apiLimiter);
-
-const RAILWAY_URL = process.env.RAILWAY_URL || 'https://calllocally.com';
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-let stripe = null;
-if (process.env.STRIPE_SECRET_KEY) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-
-const PLANS = {
-  solo:   { name: 'Solo',   price: 4900,  priceId: process.env.STRIPE_PRICE_SOLO },
-  growth: { name: 'Growth', price: 7900,  priceId: process.env.STRIPE_PRICE_GROWTH },
-  team:   { name: 'Team',   price: 12900, priceId: process.env.STRIPE_PRICE_TEAM },
-};
-
-// ── POSTGRES ──
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-});
-
-async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      auth_token TEXT NOT NULL,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      business_name TEXT NOT NULL,
-      business_phone TEXT NOT NULL,
-      trade TEXT DEFAULT 'general',
-      twilio_number TEXT,
-      custom_message TEXT,
-      after_hours_message TEXT,
-      business_hours JSONB,
-      timezone TEXT DEFAULT 'America/Los_Angeles',
-      team_phones JSONB DEFAULT '[]',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      trial_ends_at TIMESTAMPTZ,
-      plan TEXT,
-      paid BOOLEAN DEFAULT FALSE,
-      paid_through TIMESTAMPTZ,
-      stripe_customer_id TEXT,
-      stripe_subscription_id TEXT,
-      last_trial_notification INT,
-      total_leads INT DEFAULT 0,
-      total_urgent INT DEFAULT 0,
-      carrier TEXT DEFAULT 'other'
-    );
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS team_phones JSONB DEFAULT '[]';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_leads INT DEFAULT 0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_urgent INT DEFAULT 0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
-  ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_notified BOOLEAN DEFAULT FALSE;
-    CREATE TABLE IF NOT EXISTS leads (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id),
-      caller_phone TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      service TEXT,
-      address TEXT,
-      urgent BOOLEAN DEFAULT FALSE,
-      after_hours BOOLEAN DEFAULT FALSE,
-      conversation JSONB DEFAULT '[]',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      captured_at TIMESTAMPTZ
-    );
-    CREATE TABLE IF NOT EXISTS processed_stripe_events (
-      event_id TEXT PRIMARY KEY,
-      processed_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS leads_user_id_idx ON leads(user_id);
-    CREATE INDEX IF NOT EXISTS leads_caller_idx ON leads(caller_phone, status);
-    CREATE INDEX IF NOT EXISTS users_twilio_idx ON users(twilio_number);
-    CREATE INDEX IF NOT EXISTS users_stripe_customer_idx ON users(stripe_customer_id);
-    CREATE INDEX IF NOT EXISTS users_stripe_sub_idx ON users(stripe_subscription_id);
-  `);
-  console.log('DB initialized');
-}
-
-function getSenderNumber(user) {
-  if (user.tfv_notified === true || user.tfv_status === 'TWILIO_APPROVED') return user.twilio_number;
-  return process.env.ADMIN_TWILIO_NUMBER || '+19497968059';
-}
-
-function formatPhone(raw) {
-  const d = raw.replace(/\D/g,'');
-  return d.startsWith('1') ? `+${d}` : `+1${d}`;
-}
-// ── TRADE-SPECIFIC MESSAGES ──
-function getTradeMessage(businessName, trade, afterHours = false) {
-  // If contractor has set a custom message, that takes priority (handled at call site)
-  const biz = businessName;
-  const ah = afterHours;
-  const base = {
-    plumbing:    ah ? `Hi! This is ${biz} — we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
-                    : `Hi! This is ${biz} — we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
-    hvac:        ah ? `Hi! This is ${biz} — we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
-    electrical:  ah ? `Hi! This is ${biz} — we're closed. What's the electrical issue and your address? We call back emergencies 24/7 — reply URGENT if needed.`
-                    : `Hi! This is ${biz} — on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
-    roofing:     ah ? `Hi! This is ${biz} — closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} — missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
-    landscaping: ah ? `Hi! This is ${biz} — closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
-                    : `Hi! This is ${biz} — on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
-    pest:        ah ? `Hi! This is ${biz} — closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
-    handyman:    ah ? `Hi! This is ${biz} — closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
-                    : `Hi! This is ${biz} — on a job. What do you need fixed or built, and what's the address?`,
-    painting:    ah ? `Hi! This is ${biz} — closed for the day. What painting project do you have in mind and what's the address?`
-                    : `Hi! This is ${biz} — missed your call. Interior or exterior painting? And what's the address?`,
-    pool:        ah ? `Hi! This is ${biz} — closed right now. What's the pool issue and your address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} — on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
-    general:     ah ? `Hi! This is ${biz} — we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
-  };
-  return base[trade] || base.general;
-}
-
-
-function isActive(user) {
-  if (user.paid) return true;
-  if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
-  if (user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  // Pending verification = active. But if tfv_notified (approved or rejected) and no trial = not active.
-  if (!user.trial_ends_at && !user.paid && user.tfv_notified !== true) return true;
-  return false;
-}
-function isBusinessHours(user) {
-  if (!user.business_hours) return true;
-  const now = new Date();
-  const tz = user.timezone || 'America/Los_Angeles';
-  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-  const hour = local.getHours();
-  const day = local.getDay();
-  const { startHour=7, endHour=20, weekendOn=false } = user.business_hours;
-  if (!weekendOn && (day===0||day===6)) return false;
-  return hour >= startHour && hour < endHour;
-}
-
-// ── TWILIO SIGNATURE VALIDATION ──
-function validateTwilio(req, res, next) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const signature = req.headers['x-twilio-signature'];
-  const url = `${RAILWAY_URL}${req.originalUrl}`;
-  const isValid = twilio.validateRequest(authToken, signature, url, req.body || {});
-  if (!isValid) {
-    console.warn('Invalid Twilio signature from', req.ip);
-    return res.status(403).send('Forbidden');
-  }
-  next();
-}
-
-// ── DASHBOARD AUTH ──
-async function requireAuth(req, res, next) {
-  const token = req.headers['x-auth-token'] || req.query.token;
-  const userId = req.params.userId || req.query.userId;
-  if (!token || !userId) return res.status(401).json({ error: 'Unauthorized' });
-  const { rows } = await pool.query('SELECT id FROM users WHERE id=$1 AND auth_token=$2', [userId, token]);
-  if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
-  next();
-}
-
-// ── SIGNUP ──
 app.post('/api/signup', signupLimiter, async (req, res) => {
   const { name, email, businessName, businessPhone, trade, carrier } = req.body;
   if (!name || !email || !businessName || !businessPhone)
     return res.status(400).json({ error: 'All fields required' });
 
-  // Sanitize email
   const cleanEmail = email.toLowerCase().trim().slice(0, 255);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail))
     return res.status(400).json({ error: 'Invalid email' });
 
-  const existing = await pool.query('SELECT id FROM users WHERE email=$1', [cleanEmail]);
-  if (existing.rows.length) return res.status(400).json({ error: 'Email already registered' });
-
-  const formattedPhone = formatPhone(businessPhone);
-
   try {
+    const existing = await pool.query('SELECT id FROM users WHERE email=$1', [cleanEmail]);
+    if (existing.rows.length) return res.status(400).json({ error: 'Email already registered' });
+
+    const formattedPhone = formatPhone(businessPhone);
+
     // Provision toll-free number
     const tfAvail = await twilioClient.availablePhoneNumbers('US').tollFree.list({ limit: 1 });
     if (!tfAvail.length) throw new Error('No toll-free numbers available');
@@ -270,44 +384,58 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
       smsUrl: `${RAILWAY_URL}/api/twilio/sms`, smsMethod: 'POST',
     });
 
-    const userId = uuidv4(); // secure random UUID
-    const authToken = uuidv4(); // dashboard auth token
-    const trialEndsAt = null; // Trial starts when number is verified, not at signup
+    const userId = uuidv4();
+    const authToken = uuidv4();
 
     await pool.query(`
       INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at, carrier)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     `, [
-      userId, authToken, name.slice(0,100), cleanEmail, businessName.slice(0,200),
-      formattedPhone, trade||'general', purchased.phoneNumber,
-      null, null, trialEndsAt, carrier||'other',
+      userId, authToken, name.slice(0, 100), cleanEmail, businessName.slice(0, 200),
+      formattedPhone, trade || 'general', purchased.phoneNumber,
+      null, null, null, carrier || 'other',
     ]);
 
-    await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, carrier: carrier||'other' });
-    // Auto-submit toll-free verification — fire and forget, non-blocking
-    submitTollFreeVerification({ name, email: cleanEmail, businessName, business_name: businessName, twilioNumber: purchased.phoneNumber, phoneSid: purchased.sid }).catch(e => console.error('TFV error:', e.message));
+    await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, authToken, carrier: carrier || 'other' });
+
+    // FIX [5c]: Track TFV submission failure so user doesn't get stuck
+    const tfvSuccess = await submitTollFreeVerification({
+      name, email: cleanEmail, businessName, business_name: businessName,
+      twilioNumber: purchased.phoneNumber, phoneSid: purchased.sid,
+      businessPhone: formattedPhone,
+    });
+    if (!tfvSuccess) {
+      await pool.query('UPDATE users SET tfv_submission_failed=TRUE WHERE id=$1', [userId]);
+      console.error(`TFV submission failed for ${cleanEmail} — flagged for manual review`);
+    }
+
     console.log(`Signup: ${businessName} → ${purchased.phoneNumber}`);
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
-  } catch(err) {
+  } catch (err) {
     console.error('Signup error:', err.message);
-    res.status(500).json({ error: err.message });
+    // FIX [2e]: Don't leak internal error details
+    res.status(500).json({ error: 'Signup failed. Please try again or contact support.' });
   }
 });
 
-// ── STRIPE: CHECKOUT ──
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STRIPE
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.post('/api/create-checkout', async (req, res) => {
   if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
   const { userId, plan, authToken } = req.body;
   if (!userId || !PLANS[plan]) return res.status(400).json({ error: 'userId and plan required' });
 
-  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1 AND auth_token=$2', [userId, authToken]);
-  if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
-  const user = rows[0];
-
-  const planCfg = PLANS[plan];
-  if (!planCfg.priceId) return res.status(500).json({ error: `Price ID for ${plan} not set` });
-
   try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id=$1 AND auth_token=$2', [userId, authToken]);
+    if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
+    const user = rows[0];
+
+    const planCfg = PLANS[plan];
+    if (!planCfg.priceId) return res.status(500).json({ error: `Price ID for ${plan} not set` });
+
     let cid = user.stripe_customer_id;
     if (!cid) {
       const c = await stripe.customers.create({ email: user.email, name: user.business_name, metadata: { userId } });
@@ -315,357 +443,458 @@ app.post('/api/create-checkout', async (req, res) => {
       await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [cid, userId]);
     }
     const trialEnd = user.trial_ends_at ? new Date(user.trial_ends_at).getTime() : 0;
+
+    // FIX [2a]: Don't put auth tokens in Stripe redirect URLs.
+    // Dashboard should use a session cookie or re-auth flow instead.
     const session = await stripe.checkout.sessions.create({
       customer: cid,
       payment_method_types: ['card'],
       line_items: [{ price: planCfg.priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `https://calllocally.com/dashboard?upgraded=1&userId=${userId}&token=${user.auth_token}`,
-      cancel_url: `https://calllocally.com/dashboard?cancelled=1&userId=${userId}&token=${user.auth_token}`,
+      success_url: `https://calllocally.com/dashboard?upgraded=1&userId=${userId}`,
+      cancel_url: `https://calllocally.com/dashboard?cancelled=1&userId=${userId}`,
       metadata: { userId, plan },
       ...(trialEnd > Date.now() ? {
-        subscription_data: { metadata: { userId, plan }, trial_end: Math.floor(trialEnd/1000) }
+        subscription_data: { metadata: { userId, plan }, trial_end: Math.floor(trialEnd / 1000) }
       } : {}),
     });
     res.json({ url: session.url });
-  } catch(err) {
+  } catch (err) {
     console.error('Checkout error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
 
-// ── STRIPE: BILLING PORTAL ──
 app.post('/api/billing-portal', async (req, res) => {
   if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
   const { userId, authToken } = req.body;
-  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1 AND auth_token=$2', [userId, authToken]);
-  if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
-  const user = rows[0];
-  if (!user.stripe_customer_id) return res.status(400).json({ error: 'No billing account' });
   try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id=$1 AND auth_token=$2', [userId, authToken]);
+    if (!rows.length) return res.status(401).json({ error: 'Unauthorized' });
+    const user = rows[0];
+    if (!user.stripe_customer_id) return res.status(400).json({ error: 'No billing account' });
+
     const s = await stripe.billingPortal.sessions.create({
       customer: user.stripe_customer_id,
-      return_url: `https://calllocally.com/dashboard?userId=${userId}&token=${user.auth_token}`,
+      return_url: `https://calllocally.com/dashboard?userId=${userId}`,
     });
     res.json({ url: s.url });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('Billing portal error:', err.message);
+    res.status(500).json({ error: 'Failed to open billing portal' });
+  }
 });
 
-// ── STRIPE: WEBHOOK (idempotent) ──
+// ── STRIPE WEBHOOK (idempotent) ──
 app.post('/api/stripe-webhook', async (req, res) => {
   if (!stripe) return res.status(500).send('Stripe not configured');
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
-  } catch(err) { return res.status(400).send(`Webhook error: ${err.message}`); }
+  } catch (err) { return res.status(400).send(`Webhook error: ${err.message}`); }
 
-  // Idempotency — skip if already processed
-  const dup = await pool.query('SELECT event_id FROM processed_stripe_events WHERE event_id=$1', [event.id]);
-  if (dup.rows.length) return res.json({ received: true, duplicate: true });
-  await pool.query('INSERT INTO processed_stripe_events (event_id) VALUES ($1)', [event.id]);
+  try {
+    // Idempotency
+    const dup = await pool.query('SELECT event_id FROM processed_stripe_events WHERE event_id=$1', [event.id]);
+    if (dup.rows.length) return res.json({ received: true, duplicate: true });
+    await pool.query('INSERT INTO processed_stripe_events (event_id) VALUES ($1)', [event.id]);
 
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const s = event.data.object;
-      const { userId, plan } = s.metadata || {};
-      if (userId) {
-        await pool.query('UPDATE users SET paid=TRUE, plan=$1, stripe_subscription_id=$2 WHERE id=$3',
-          [plan, s.subscription, userId]);
-        const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [userId]);
-        if (rows.length) await sendUpgradeEmail(rows[0], plan);
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const s = event.data.object;
+        const { userId, plan } = s.metadata || {};
+        if (userId) {
+          await pool.query('UPDATE users SET paid=TRUE, plan=$1, stripe_subscription_id=$2 WHERE id=$3',
+            [plan, s.subscription, userId]);
+          // FIX [7c]: Wrap email in try/catch so it doesn't prevent webhook ack
+          try {
+            const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [userId]);
+            if (rows.length) await sendUpgradeEmail(rows[0], plan);
+          } catch (emailErr) {
+            console.error('Upgrade email failed (payment still processed):', emailErr.message);
+          }
+        }
+        break;
       }
-      break;
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        await pool.query('UPDATE users SET paid=$1, plan=$2 WHERE stripe_subscription_id=$3',
+          [['active', 'trialing', 'past_due'].includes(sub.status), sub.metadata?.plan || null, sub.id]);
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const paidThrough = new Date(sub.current_period_end * 1000);
+        await pool.query('UPDATE users SET paid=FALSE, plan=NULL, paid_through=$1 WHERE stripe_subscription_id=$2',
+          [paidThrough, sub.id]);
+        try {
+          const { rows } = await pool.query('SELECT * FROM users WHERE stripe_subscription_id=$1', [sub.id]);
+          if (rows.length) await sendCancellationEmail(rows[0], paidThrough.toISOString());
+        } catch (emailErr) {
+          console.error('Cancellation email failed:', emailErr.message);
+        }
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const inv = event.data.object;
+        try {
+          const { rows } = await pool.query('SELECT * FROM users WHERE stripe_customer_id=$1', [inv.customer]);
+          if (rows.length) await sendPaymentFailedEmail(rows[0]);
+        } catch (emailErr) {
+          console.error('Payment failed email error:', emailErr.message);
+        }
+        break;
+      }
     }
-    case 'customer.subscription.updated': {
-      const sub = event.data.object;
-      await pool.query('UPDATE users SET paid=$1, plan=$2 WHERE stripe_subscription_id=$3',
-        [['active','trialing','past_due'].includes(sub.status), sub.metadata?.plan||null, sub.id]);
-      break;
-    }
-    case 'customer.subscription.deleted': {
-      const sub = event.data.object;
-      const paidThrough = new Date(sub.current_period_end * 1000);
-      await pool.query('UPDATE users SET paid=FALSE, plan=NULL, paid_through=$1 WHERE stripe_subscription_id=$2',
-        [paidThrough, sub.id]);
-      const { rows } = await pool.query('SELECT * FROM users WHERE stripe_subscription_id=$1', [sub.id]);
-      if (rows.length) await sendCancellationEmail(rows[0], paidThrough.toISOString());
-      break;
-    }
-    case 'invoice.payment_failed': {
-      const inv = event.data.object;
-      const { rows } = await pool.query('SELECT * FROM users WHERE stripe_customer_id=$1', [inv.customer]);
-      if (rows.length) await sendPaymentFailedEmail(rows[0]);
-      break;
-    }
+  } catch (err) {
+    console.error('Stripe webhook processing error:', err.message);
+    // Still return 200 — we've recorded the event ID, and returning 4xx/5xx
+    // causes Stripe to retry, which could double-process
   }
   res.json({ received: true });
 });
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// CALL FLOW — TWILIO WEBHOOKS
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── VOICEMAIL RECORDING COMPLETE ──
 app.post('/api/voicemail', validateTwilio, async (req, res) => {
-  const { RecordingUrl, RecordingDuration, Called, To: ToVM, Caller, RecordingSid } = req.body;
-  const calledNumber = Called || ToVM;
-  if (!RecordingUrl || !calledNumber) return res.status(200).send('OK');
-
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNumber]);
-  const user = rows[0];
-  if (!user || !isActive(user)) return res.status(200).send('OK');
-
-  const duration = parseInt(RecordingDuration) || 0;
-  if (duration < 2) return res.status(200).send('OK'); // skip accidental beep recordings
-
-  // Insert lead for voicemail if no existing waiting lead from this caller
-  const existingLead = await pool.query(`
-    SELECT id FROM leads WHERE user_id=$1 AND caller_phone=$2 AND status='waiting'
-    AND created_at > NOW() - INTERVAL '24 hours'
-  `, [user.id, Caller]);
-
-  if (!existingLead.rows.length) {
-    await pool.query(`
-      INSERT INTO leads (id, user_id, caller_phone, after_hours, status, service)
-      VALUES ($1,$2,$3,$4,'captured','Voicemail left')
-    `, [uuidv4(), user.id, Caller, !isBusinessHours(user)]);
-    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
-  } else {
-    await pool.query(`
-      UPDATE leads SET status='captured', captured_at=NOW(), service='Voicemail left'
-      WHERE id=$1
-    `, [existingLead.rows[0].id]);
-  }
-
-  // Notify contractor via SMS
-  const durMins = Math.floor(duration/60);
-  const durSecs = duration % 60;
-  const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
-  const sms = `📱 Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
   try {
-    await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone });
-    if (user.plan === 'team' && Array.isArray(user.team_phones)) {
-      for (const phone of user.team_phones) {
-        try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); } catch(e) {}
-      }
-    }
-  } catch(e) { console.error('Voicemail SMS:', e.message); }
+    const { RecordingUrl, RecordingDuration, Called, To: ToVM, Caller, RecordingSid } = req.body;
+    const calledNumber = Called || ToVM;
+    if (!RecordingUrl || !calledNumber) return res.status(200).send('OK');
 
-  // Email with playback link
-  if (process.env.SENDGRID_API_KEY && user.email) {
+    const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNumber]);
+    const user = rows[0];
+    if (!user || !isActive(user)) return res.status(200).send('OK');
+
+    const duration = parseInt(RecordingDuration) || 0;
+    if (duration < 2) return res.status(200).send('OK');
+
+    // Check for existing pending lead from this caller (not 'waiting' — status is 'pending')
+    // FIX [3 race condition]: Match on 'pending' status, not 'waiting' (which doesn't exist)
+    const existingLead = await pool.query(`
+      SELECT id FROM leads WHERE user_id=$1 AND caller_phone=$2 AND status='pending'
+      AND created_at > NOW() - INTERVAL '24 hours'
+    `, [user.id, Caller]);
+
+    if (!existingLead.rows.length) {
+      await pool.query(`
+        INSERT INTO leads (id, user_id, caller_phone, after_hours, status, service, sent_from)
+        VALUES ($1,$2,$3,$4,'captured','Voicemail left',$5)
+      `, [uuidv4(), user.id, Caller, !isBusinessHours(user), getSenderNumber(user)]);
+      await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
+    } else {
+      await pool.query(`
+        UPDATE leads SET status='captured', captured_at=NOW(), service='Voicemail left'
+        WHERE id=$1
+      `, [existingLead.rows[0].id]);
+      await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
+    }
+
+    // Notify contractor via SMS
+    const durMins = Math.floor(duration / 60);
+    const durSecs = duration % 60;
+    const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
+    const sms = `📱 Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
     try {
-      await sgMail.send({
-        to: user.email, from: 'hello@calllocally.com',
-        subject: `📱 Voicemail from ${Caller} (${durStr})`,
-        html: `<div style="font-family:sans-serif;max-width:480px">
-          <h2 style="color:#FF5C1A">New Voicemail</h2>
-          <p><b>From:</b> ${Caller}</p>
-          <p><b>Duration:</b> ${durStr}</p>
-          <a href="${RecordingUrl}.mp3" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">▶ Play Voicemail</a>
-          <p style="margin-top:16px;font-size:13px;color:#888">You can also call back: <a href="tel:${Caller}">${Caller}</a></p>
-        </div>`,
-      });
-    } catch(e) { console.error('Voicemail email:', e.message); }
+      await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone });
+      if (user.plan === 'team' && Array.isArray(user.team_phones)) {
+        for (const phone of user.team_phones) {
+          try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); } catch (e) { }
+        }
+      }
+    } catch (e) { console.error('Voicemail SMS:', e.message); }
+
+    // Email with playback link
+    if (process.env.SENDGRID_API_KEY && user.email) {
+      try {
+        await sgMail.send({
+          to: user.email, from: 'hello@calllocally.com',
+          subject: `📱 Voicemail from ${Caller} (${durStr})`,
+          html: `<div style="font-family:sans-serif;max-width:480px">
+            <h2 style="color:#FF5C1A">New Voicemail</h2>
+            <p><b>From:</b> ${Caller}</p>
+            <p><b>Duration:</b> ${durStr}</p>
+            <a href="${RecordingUrl}.mp3" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">▶ Play Voicemail</a>
+            <p style="margin-top:16px;font-size:13px;color:#888">You can also call back: <a href="tel:${Caller}">${Caller}</a></p>
+          </div>`,
+        });
+      } catch (e) { console.error('Voicemail email:', e.message); }
+    }
+  } catch (err) {
+    console.error('Voicemail handler error:', err.message);
   }
   res.status(200).send('OK');
 });
 
 // ── CALL FORWARDING ──
-// Twilio hits this when someone calls the toll-free number
-// Changed to POST so Twilio body params (Direction, To, etc) are available
-app.post('/api/forward', async (req, res) => {
+// FIX [2c]: Added validateTwilio + twilioWebhookLimiter
+// FIX [7b]: Wrapped in try/catch with TwiML error fallback
+app.post('/api/forward', twilioWebhookLimiter, validateTwilio, async (req, res) => {
   res.set('Content-Type', 'text/xml');
+  try {
+    const calledNum = req.body.To || req.body.Called;
+    const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
+    const user = rows[0];
 
-  const calledNum = req.body.To || req.body.Called;
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
-  const user = rows[0];
+    if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
+    if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say></Response>');
 
-  if (!user) return res.send('<?xml version="1.0"?><Response><Say>This number is not configured.</Say></Response>');
-  if (!isActive(user)) return res.send('<?xml version="1.0"?><Response><Say>This service is temporarily inactive.</Say></Response>');
-
-  // Dial contractor for 15s. When done (answered or not), Twilio POSTs to /api/dial-complete.
-  // The caller stays on hold during the dial — they never hear a ring, just silence/hold music.
-  res.send(`<?xml version="1.0"?><Response>
-    <Dial timeout="15" action="${RAILWAY_URL}/api/dial-complete" method="POST">
-      ${user.business_phone}
-    </Dial>
-  </Response>`);
+    res.send(`<?xml version="1.0"?><Response>
+      <Dial timeout="15" action="${RAILWAY_URL}/api/dial-complete" method="POST">
+        ${user.business_phone}
+      </Dial>
+    </Response>`);
+  } catch (err) {
+    console.error('Forward error:', err.message);
+    twimlError(res, 'Sorry, we are experiencing technical difficulties. Please try again later.');
+  }
 });
 
 // ── DIAL COMPLETE ──
-// Twilio POSTs here when the <Dial> verb ends (contractor answered, or timeout/busy/failed)
-// req.body.DialCallStatus = "completed" | "no-answer" | "busy" | "failed"
-// req.body.From = original caller's number
-// req.body.To = the Twilio number that was called
-app.post('/api/dial-complete', async (req, res) => {
+// FIX [2c]: Added validateTwilio + twilioWebhookLimiter
+// FIX [7b]: Wrapped in try/catch with TwiML error fallback
+app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req, res) => {
   res.set('Content-Type', 'text/xml');
-
-  const { DialCallStatus, From, To, Called } = req.body;
-  const calledNum = To || Called;
-  const callerNum = From;
-
-  // Contractor answered — done, hang up
-  if (DialCallStatus === 'completed') {
-    return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
-  }
-
-  // Contractor didn't answer — get their info, send lead SMS, play voicemail
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
-  const user = rows[0];
-  if (!user || !isActive(user)) {
-    return res.send('<?xml version="1.0"?><Response><Say>Sorry, this number is unavailable.</Say><Hangup/></Response>');
-  }
-
-  const isAH = !isBusinessHours(user);
-
-  // Send lead capture SMS to caller immediately
-  const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
-  const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
   try {
-    await twilioClient.messages.create({ body: message, from: getSenderNumber(user), to: callerNum });
-    await pool.query(`INSERT INTO leads (id, user_id, caller_phone, after_hours, status) VALUES ($1,$2,$3,$4,'pending') ON CONFLICT DO NOTHING`,
-      [uuidv4(), user.id, callerNum, isAH]);
-    // total_leads NOT incremented yet — only counts when customer replies
-    console.log(`Lead SMS sent (pending reply): ${callerNum} → ${user.business_name}`);
-  } catch(e) { console.error('Lead SMS error:', e.message); }
+    const { DialCallStatus, From, To, Called } = req.body;
+    const calledNum = To || Called;
+    const callerNum = From;
 
-  // Play voicemail greeting and record
-  const isAfterHours = isAH;
-  const vmGreeting = user.custom_message
-    ? `Please leave a voicemail or text this number your service need and address.`
-    : isAfterHours
-      ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and we'll call you back in the morning.`
-      : `Hi, you've reached ${user.business_name}. We're on a job. Please leave a voicemail or text this number your service need and address and we'll call you right back.`;
+    // Contractor answered — done
+    if (DialCallStatus === 'completed') {
+      return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
+    }
 
-  res.send(`<?xml version="1.0"?><Response>
-    <Say voice="Polly.Joanna">${vmGreeting}</Say>
-    <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
-    <Say voice="Polly.Joanna">We did not receive a recording. Goodbye.</Say>
-  </Response>`);
+    const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [calledNum]);
+    const user = rows[0];
+    if (!user || !isActive(user)) {
+      return res.send('<?xml version="1.0"?><Response><Say>Sorry, this number is unavailable.</Say><Hangup/></Response>');
+    }
+
+    const isAH = !isBusinessHours(user);
+    const senderNumber = getSenderNumber(user);
+
+    // Send lead capture SMS to caller
+    const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
+    const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
+    try {
+      await twilioClient.messages.create({ body: message, from: senderNumber, to: callerNum });
+
+      // FIX [1d/4]: Store sent_from so replies to admin number can be routed correctly
+      // FIX [6a]: ON CONFLICT uses the new partial unique index on (user_id, caller_phone) WHERE status='pending'
+      await pool.query(`
+        INSERT INTO leads (id, user_id, caller_phone, after_hours, status, sent_from)
+        VALUES ($1,$2,$3,$4,'pending',$5)
+        ON CONFLICT (user_id, caller_phone) WHERE status = 'pending' DO NOTHING
+      `, [uuidv4(), user.id, callerNum, isAH, senderNumber]);
+
+      // total_leads NOT incremented yet — only when customer replies
+      console.log(`Lead SMS sent (pending reply): ${callerNum} → ${user.business_name}`);
+    } catch (e) { console.error('Lead SMS error:', e.message); }
+
+    // Play voicemail greeting and record
+    const vmGreeting = user.custom_message
+      ? `Please leave a voicemail or text this number your service need and address.`
+      : isAH
+        ? `Hi, you've reached ${user.business_name}. We're closed right now. Please leave a voicemail or text this number your service need and we'll call you back in the morning.`
+        : `Hi, you've reached ${user.business_name}. We're on a job. Please leave a voicemail or text this number your service need and address and we'll call you right back.`;
+
+    res.send(`<?xml version="1.0"?><Response>
+      <Say voice="Polly.Joanna">${vmGreeting}</Say>
+      <Record maxLength="120" playBeep="true" action="${RAILWAY_URL}/api/voicemail" timeout="5" finishOnKey="#"/>
+      <Say voice="Polly.Joanna">We did not receive a recording. Goodbye.</Say>
+    </Response>`);
+  } catch (err) {
+    console.error('Dial-complete error:', err.message);
+    twimlError(res);
+  }
 });
 
-// ── CALL STATUS → SMS (Twilio-validated) ──
+// ── CALL STATUS (safety valve — no longer sends SMS or creates leads) ──
+// FIX [1b/1c]: Gutted this handler. It was double-sending SMS and double-creating leads.
+// /api/dial-complete already handles the missed-call flow. This is kept only for logging.
 app.post('/api/call-status', validateTwilio, async (req, res) => {
-  // Lead capture now handled by /api/dial-complete — this is a no-op safety valve
   const { DialCallStatus, Caller, Called } = req.body;
-  if (!DialCallStatus || !Caller) return res.status(200).send('OK');
-  // Only handle if dial-complete somehow missed it
-  if (!['no-answer','busy','failed'].includes(DialCallStatus)) return res.status(200).send('OK');
-
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [Called]);
-  const user = rows[0];
-  if (!user || !isActive(user)) return res.status(200).send('OK');
-
-  const afterHours = !isBusinessHours(user);
-  // Use custom message if contractor set one, otherwise use trade-specific default
-  const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', afterHours);
-  const message = afterHours
-    ? (user.after_hours_message || defaultMsg)
-    : (user.custom_message || defaultMsg);
-
-  try {
-    await twilioClient.messages.create({ body: message, from: getSenderNumber(user), to: Caller });
-    await pool.query(`
-      INSERT INTO leads (id, user_id, caller_phone, after_hours)
-      VALUES ($1,$2,$3,$4)
-    `, [uuidv4(), user.id, Caller, afterHours]);
-    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
-  } catch(e) { console.error('SMS error:', e.message); }
+  if (DialCallStatus && ['no-answer', 'busy', 'failed'].includes(DialCallStatus)) {
+    console.log(`Call status: ${DialCallStatus} from ${Caller} to ${Called} (handled by dial-complete)`);
+  }
   res.status(200).send('OK');
 });
 
-// ── INCOMING SMS (Twilio-validated) ──
+
+// ── INCOMING SMS (customer reply) ──
+// FIX [1d/4]: Handles replies to BOTH the contractor's number AND the admin fallback number
 app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
-  const { From, To, Body } = req.body;
+  try {
+    const { From, To, Body } = req.body;
 
-  const leadRes = await pool.query(`
-    SELECT l.*, u.* FROM leads l
-    JOIN users u ON l.user_id = u.id
-    WHERE l.caller_phone=$1 AND l.status='pending' AND u.twilio_number=$2
-    ORDER BY l.created_at DESC LIMIT 1
-  `, [From, To]);
+    let leadRes;
 
-  const row = leadRes.rows[0];
-  let reply = "Thanks! We got your message and will call you back shortly.";
+    if (To === ADMIN_TWILIO_NUMBER) {
+      // FIX [1d]: Reply came to the admin number (TFV pending). Look up by sent_from column.
+      leadRes = await pool.query(`
+        SELECT l.*, u.id as uid, u.business_name, u.business_phone, u.twilio_number as user_twilio,
+               u.email, u.plan, u.team_phones, u.trade, u.paid, u.paid_through, u.trial_ends_at,
+               u.tfv_notified, u.total_leads, u.total_urgent, u.carrier,
+               u.custom_message, u.after_hours_message, u.business_hours, u.timezone
+        FROM leads l
+        JOIN users u ON l.user_id = u.id
+        WHERE l.caller_phone=$1 AND l.status='pending' AND l.sent_from=$2
+        ORDER BY l.created_at DESC LIMIT 1
+      `, [From, ADMIN_TWILIO_NUMBER]);
+    } else {
+      // Normal path: reply came to the contractor's verified number
+      leadRes = await pool.query(`
+        SELECT l.*, u.id as uid, u.business_name, u.business_phone, u.twilio_number as user_twilio,
+               u.email, u.plan, u.team_phones, u.trade, u.paid, u.paid_through, u.trial_ends_at,
+               u.tfv_notified, u.total_leads, u.total_urgent, u.carrier,
+               u.custom_message, u.after_hours_message, u.business_hours, u.timezone
+        FROM leads l
+        JOIN users u ON l.user_id = u.id
+        WHERE l.caller_phone=$1 AND l.status='pending' AND u.twilio_number=$2
+        ORDER BY l.created_at DESC LIMIT 1
+      `, [From, To]);
+    }
 
-  if (row && isActive(row)) {
-    const urgent = /urgent|emergency|asap|right now|leaking|flooding|no heat|no ac|burst|broken|fire|smoke|gas/i.test(Body);
-    const addrMatch = Body.match(/\d+\s+[\w\s]+(st|ave|rd|blvd|dr|ln|way|ct|pl|street|avenue|road|drive|lane)/i);
-    const conversation = [...(row.conversation||[]), { from:'customer', text:Body.slice(0,500), time:new Date().toISOString() }];
+    const row = leadRes.rows[0];
+    let reply = "Thanks! We got your message and will call you back shortly.";
 
-    await pool.query(`
-      UPDATE leads SET status='captured', captured_at=NOW(), urgent=$1,
-        service=COALESCE(service,$2), address=COALESCE(address,$3), conversation=$4
-      WHERE id=$5
-    `, [urgent||row.urgent, Body.slice(0,500), addrMatch?addrMatch[0]:row.address, JSON.stringify(conversation), row.id]);
+    if (row && isActive(row)) {
+      const urgent = /urgent|emergency|asap|right now|leaking|flooding|no heat|no ac|burst|broken|fire|smoke|gas/i.test(Body);
+      const addrMatch = Body.match(/\d+\s+[\w\s]+(st|ave|rd|blvd|dr|ln|way|ct|pl|street|avenue|road|drive|lane)/i);
 
-    await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [row.user_id]);
-    await notifyContractor(row, { ...row, urgent: urgent||row.urgent, service: row.service||Body, address: addrMatch?addrMatch[0]:row.address });
-    reply = urgent ? `Got it — urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
+      // FIX [6d]: Cap conversation array size to prevent unbounded growth
+      const existingConvo = Array.isArray(row.conversation) ? row.conversation.slice(-19) : [];
+      const conversation = [...existingConvo, { from: 'customer', text: Body.slice(0, 500), time: new Date().toISOString() }];
+
+      await pool.query(`
+        UPDATE leads SET status='captured', captured_at=NOW(), urgent=$1,
+          service=COALESCE(service,$2), address=COALESCE(address,$3), conversation=$4
+        WHERE id=$5
+      `, [urgent || row.urgent, Body.slice(0, 500), addrMatch ? addrMatch[0] : row.address, JSON.stringify(conversation), row.id]);
+
+      await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [row.user_id]);
+
+      // Build a user-like object for notifyContractor
+      const userForNotify = {
+        business_name: row.business_name,
+        business_phone: row.business_phone,
+        twilio_number: row.user_twilio,
+        email: row.email,
+        plan: row.plan,
+        team_phones: row.team_phones,
+        tfv_notified: row.tfv_notified,
+      };
+      const leadForNotify = {
+        ...row,
+        urgent: urgent || row.urgent,
+        service: row.service || Body,
+        address: addrMatch ? addrMatch[0] : row.address,
+      };
+      await notifyContractor(userForNotify, leadForNotify);
+      reply = urgent ? `Got it — urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
+    }
+
+    res.set('Content-Type', 'text/xml');
+    res.send(`<?xml version="1.0"?><Response><Message>${reply}</Message></Response>`);
+  } catch (err) {
+    console.error('SMS handler error:', err.message);
+    res.set('Content-Type', 'text/xml');
+    res.send(`<?xml version="1.0"?><Response><Message>Thanks! We received your message.</Message></Response>`);
   }
-
-  res.set('Content-Type', 'text/xml');
-  res.send(`<?xml version="1.0"?><Response><Message>${reply}</Message></Response>`);
 });
 
-// ── DASHBOARD API (authenticated) ──
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD API
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.get('/api/leads', requireAuth, async (req, res) => {
-  const { userId } = req.query;
-  const { rows } = await pool.query(
-    'SELECT * FROM leads WHERE user_id=$1 ORDER BY created_at DESC LIMIT 500', [userId]);
-  res.json(rows);
+  try {
+    const { userId } = req.query;
+    const { rows } = await pool.query(
+      'SELECT * FROM leads WHERE user_id=$1 ORDER BY created_at DESC LIMIT 500', [userId]);
+    res.json(rows);
+  } catch (err) {
+    console.error('Leads fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch leads' });
+  }
 });
 
 app.get('/api/user/:userId', requireAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.params.userId]);
-  if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  const u = rows[0];
-  // Never return auth_token or stripe internals in user response
-  const { auth_token, stripe_customer_id, ...safe } = u;
-  safe.active = isActive(u);
-  res.json(safe);
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.params.userId]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const u = rows[0];
+    // FIX [2b]: Also exclude stripe_subscription_id from response
+    const { auth_token, stripe_customer_id, stripe_subscription_id, ...safe } = u;
+    safe.active = isActive(u);
+    res.json(safe);
+  } catch (err) {
+    console.error('User fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
 });
 
 app.patch('/api/user/:userId', requireAuth, async (req, res) => {
-  const { customMessage, afterHoursMessage, businessHours, timezone, teamPhones } = req.body;
-  await pool.query(`
-    UPDATE users SET
-      custom_message = COALESCE($1, custom_message),
-      after_hours_message = COALESCE($2, after_hours_message),
-      business_hours = COALESCE($3, business_hours),
-      timezone = COALESCE($4, timezone),
-      team_phones = COALESCE($5, team_phones)
-    WHERE id=$6
-  `, [customMessage||null, afterHoursMessage||null,
-      businessHours?JSON.stringify(businessHours):null,
-      timezone||null,
-      teamPhones?JSON.stringify(teamPhones):null,
+  try {
+    const { customMessage, afterHoursMessage, businessHours, timezone, teamPhones } = req.body;
+    await pool.query(`
+      UPDATE users SET
+        custom_message = COALESCE($1, custom_message),
+        after_hours_message = COALESCE($2, after_hours_message),
+        business_hours = COALESCE($3, business_hours),
+        timezone = COALESCE($4, timezone),
+        team_phones = COALESCE($5, team_phones)
+      WHERE id=$6
+    `, [customMessage || null, afterHoursMessage || null,
+      businessHours ? JSON.stringify(businessHours) : null,
+      timezone || null,
+      teamPhones ? JSON.stringify(teamPhones) : null,
       req.params.userId]);
-  res.json({ success: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('User update error:', err.message);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
 });
 
-// ── ADMIN: USER LIST (for you to see all users) ──
-// Protected by a separate admin token from env var
+// ── ADMIN: USER LIST ──
 app.get('/api/admin/users', async (req, res) => {
   const adminToken = req.headers['x-admin-token'];
   if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
-  const { rows } = await pool.query(`
-    SELECT id, name, email, business_name, business_phone, twilio_number, trade,
-           created_at, trial_ends_at, plan, paid, paid_through, stripe_customer_id
-    FROM users ORDER BY created_at DESC
-  `);
-  res.json(rows);
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, email, business_name, business_phone, twilio_number, trade,
+             created_at, trial_ends_at, plan, paid, paid_through, stripe_customer_id,
+             tfv_notified, tfv_submission_failed
+      FROM users ORDER BY created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error('Admin users error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
 });
 
-// ── EMAIL HELPERS ──
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EMAIL HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+
 async function notifyContractor(user, lead) {
   const flag = lead.urgent ? '🚨 URGENT — ' : '';
-  const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service||'See reply'}\nAddress: ${lead.address||'Ask when you call'}${lead.after_hours?' \n⏰ After hours':''}`;
-  // Send to primary number
+  const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Ask when you call'}${lead.after_hours ? ' \n⏰ After hours' : ''}`;
   try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
-  catch(e) { console.error('Contractor SMS:', e.message); }
-  // Team plan: also send to additional team members
+  catch (e) { console.error('Contractor SMS:', e.message); }
   if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
     for (const phone of user.team_phones) {
       try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); }
-      catch(e) { console.error('Team SMS error:', e.message); }
+      catch (e) { console.error('Team SMS error:', e.message); }
     }
   }
   if (!process.env.SENDGRID_API_KEY || !user.email) return;
@@ -676,51 +905,22 @@ async function notifyContractor(user, lead) {
       html: `<div style="font-family:sans-serif;max-width:480px">
         <h2 style="color:#FF5C1A">${flag}New CallLocally Lead</h2>
         <p><b>Caller:</b> ${lead.caller_phone}</p>
-        <p><b>Service:</b> ${lead.service||'Not specified'}</p>
-        <p><b>Address:</b> ${lead.address||'Ask when you call'}</p>
-        <p><b>Urgent:</b> ${lead.urgent?'Yes 🚨':'No'}</p>
-        ${lead.after_hours?'<p><b>⏰ After hours lead</b></p>':''}
+        <p><b>Service:</b> ${lead.service || 'Not specified'}</p>
+        <p><b>Address:</b> ${lead.address || 'Ask when you call'}</p>
+        <p><b>Urgent:</b> ${lead.urgent ? 'Yes 🚨' : 'No'}</p>
+        ${lead.after_hours ? '<p><b>⏰ After hours lead</b></p>' : ''}
         <a href="tel:${lead.caller_phone}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">📞 Call back now</a>
       </div>`,
     });
-  } catch(e) { console.error('Email:', e.message); }
+  } catch (e) { console.error('Email:', e.message); }
 }
+
 async function sendWelcomeEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   const num = user.twilioNumber;
-  const digits = num.replace('+','').replace(/\D/g,'');
+  // FIX [1g]: Use single source of truth for carrier codes
   const carrier = (user.carrier || 'other').toLowerCase();
-
-  // Carrier-specific forwarding codes and instructions
-  const carrierInstructions = {
-    tmobile: {
-      name: 'T-Mobile',
-      dialCode: `**61*${digits}#`,
-      note: 'T-Mobile uses a slightly different format.',
-      extra: '<p style="font-size:13px;color:#888;margin-top:8px">T-Mobile tip: If this doesn\'t work, call <b>611</b> from your phone and say "Set up call forwarding when unanswered to ' + num + '". Takes 2 minutes.</p>'
-    },
-    att: {
-      name: 'AT&T',
-      dialCode: `*61*${digits}**18#`,
-      note: null,
-      extra: ''
-    },
-    verizon: {
-      name: 'Verizon',
-      dialCode: `*71${digits}`,
-      note: null,
-      extra: ''
-    },
-    other: {
-      name: 'your carrier',
-      dialCode: `*61*${digits}**18#`,
-      note: null,
-      extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this code doesn\'t work for your carrier, text us at hello@calllocally.com and we\'ll send you the right one.</p>'
-    }
-  };
-
-  const ci = carrierInstructions[carrier] || carrierInstructions.other;
-  const dialCode = ci.dialCode;
+  const ci = getCarrierInstructions(carrier, num);
 
   try {
     await sgMail.send({
@@ -739,7 +939,7 @@ async function sendWelcomeEmail(user) {
 
         <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
           <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#FF5C1A;margin-bottom:10px">Dial this on your ${ci.name} phone</p>
-          <p style="font-size:32px;font-weight:700;font-family:monospace;color:#1a1a1a;letter-spacing:3px;margin:0">${dialCode}</p>
+          <p style="font-size:32px;font-weight:700;font-family:monospace;color:#1a1a1a;letter-spacing:3px;margin:0">${ci.dialCode}</p>
           <p style="font-size:13px;color:#888;margin-top:10px">Then press <b>Call</b>. Done.</p>
           ${ci.extra}
         </div>
@@ -756,16 +956,15 @@ async function sendWelcomeEmail(user) {
         </div>
 
         <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-        <p style="margin-bottom:4px"><b>Your dashboard:</b> <a href="https://calllocally.com/dashboard?userId=${user.id}&token=${user.auth_token || user.authToken}" style="color:#FF5C1A">calllocally.com/dashboard →</a></p>
         <p style="font-size:13px;color:#999">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
-  } catch(e) { console.error('Welcome email:', e.message); }
+  } catch (e) { console.error('Welcome email:', e.message); }
 }
 
 async function sendUpgradeEmail(user, plan) {
   if (!process.env.SENDGRID_API_KEY) return;
-  const planName = PLANS[plan]?.name||plan;
+  const planName = PLANS[plan]?.name || plan;
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
@@ -775,11 +974,12 @@ async function sendUpgradeEmail(user, plan) {
         <p>Hey ${user.name}, your ${planName} plan is active. Your number <b>${user.twilio_number}</b> is capturing leads.</p>
       </div>`,
     });
-  } catch(e) { console.error('Upgrade email:', e.message); }
+  } catch (e) { console.error('Upgrade email:', e.message); }
 }
+
 async function sendCancellationEmail(user, paidThrough) {
   if (!process.env.SENDGRID_API_KEY) return;
-  const endDate = new Date(paidThrough).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const endDate = new Date(paidThrough).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
@@ -790,8 +990,9 @@ async function sendCancellationEmail(user, paidThrough) {
         <p><a href="https://calllocally.com/dashboard">Reactivate anytime →</a></p>
       </div>`,
     });
-  } catch(e) { console.error('Cancel email:', e.message); }
+  } catch (e) { console.error('Cancel email:', e.message); }
 }
+
 async function sendPaymentFailedEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   try {
@@ -804,55 +1005,32 @@ async function sendPaymentFailedEmail(user) {
         <a href="https://calllocally.com/dashboard" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Update payment →</a>
       </div>`,
     });
-  } catch(e) { console.error('Payment failed email:', e.message); }
+  } catch (e) { console.error('Payment failed email:', e.message); }
 }
+
 async function sendTrialEmail(user, daysLeft) {
   if (!process.env.SENDGRID_API_KEY) return;
   const link = `https://calllocally.com/dashboard?userId=${user.id}`;
   const configs = {
-    7: { subject:'⏰ 7 days left on your CallLocally trial', body:`<p>Hey ${user.name}, 7 days left. Solo is $49/mo — <a href="${link}">upgrade now</a>.</p>` },
-    1: { subject:'⚠️ Your trial ends tomorrow', body:`<p>Hey ${user.name}, trial ends tomorrow. <a href="${link}">Upgrade now →</a></p>` },
-    0: { subject:'Your CallLocally trial has ended', body:`<p>Hey ${user.name}, trial ended. <a href="${link}">Reactivate →</a></p>` },
+    7: { subject: '⏰ 7 days left on your CallLocally trial', body: `<p>Hey ${user.name}, 7 days left. Solo is $49/mo — <a href="${link}">upgrade now</a>.</p>` },
+    1: { subject: '⚠️ Your trial ends tomorrow', body: `<p>Hey ${user.name}, trial ends tomorrow. <a href="${link}">Upgrade now →</a></p>` },
+    0: { subject: 'Your CallLocally trial has ended', body: `<p>Hey ${user.name}, trial ended. <a href="${link}">Reactivate →</a></p>` },
   };
   if (!configs[daysLeft]) return;
   try {
-    await sgMail.send({ to: user.email, from: 'hello@calllocally.com', subject: configs[daysLeft].subject,
-      html: `<div style="font-family:sans-serif;max-width:480px">${configs[daysLeft].body}</div>` });
-  } catch(e) { console.error('Trial email:', e.message); }
+    await sgMail.send({
+      to: user.email, from: 'hello@calllocally.com', subject: configs[daysLeft].subject,
+      html: `<div style="font-family:sans-serif;max-width:480px">${configs[daysLeft].body}</div>`
+    });
+  } catch (e) { console.error('Trial email:', e.message); }
 }
-
-// ── TFV STATUS WEBHOOK + VERIFIED EMAIL ──
-// Twilio hits this when toll-free verification status changes
-app.post('/api/tfv-webhook', async (req, res) => {
-  const { TollfreePhoneNumber, Status } = req.body;
-  res.sendStatus(200); // Always ack immediately
-
-  if (Status !== 'TWILIO_APPROVED') return; // Only care about approvals
-
-  const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [TollfreePhoneNumber]);
-  const user = rows[0];
-  if (!user) return;
-
-  console.log(`TFV approved for ${TollfreePhoneNumber} (user: ${user.email})`);
-  const wTrial = new Date(Date.now() + 14*24*60*60*1000);
-  await pool.query('UPDATE users SET trial_ends_at=$1, tfv_notified=TRUE WHERE id=$2', [wTrial, user.id]);
-  const wFresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
-  await sendVerifiedEmail(wFresh);
-});
 
 async function sendVerifiedEmail(user) {
   if (!process.env.SENDGRID_API_KEY) return;
   const num = user.twilio_number;
-  const digits = num.replace('+','').replace(/\D/g,'');
+  // FIX [1g]: Use single source of truth for carrier codes
   const carrier = (user.carrier || 'other').toLowerCase();
-
-  const carrierInstructions = {
-    tmobile: { name: 'T-Mobile', dialCode: `*61*${digits}**18#`, extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this doesn\'t work, call <b>611</b> and say "Set up call forwarding when unanswered to ' + num + '".</p>' },
-    att:     { name: 'AT&T',     dialCode: `*61*${digits}**18#`, extra: '' },
-    verizon: { name: 'Verizon',  dialCode: `*71${digits}`,       extra: '' },
-    other:   { name: 'your carrier', dialCode: `*61*${digits}**18#`, extra: '<p style="font-size:13px;color:#888;margin-top:8px">If this code doesn\'t work, email hello@calllocally.com and we\'ll send you the right one.</p>' }
-  };
-  const ci = carrierInstructions[carrier] || carrierInstructions.other;
+  const ci = getCarrierInstructions(carrier, num);
 
   try {
     await sgMail.send({
@@ -884,36 +1062,170 @@ async function sendVerifiedEmail(user) {
           </p>
         </div>
 
-        <a href="https://calllocally.com/dashboard?userId=${user.id}&token=${user.auth_token}" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
+        <a href="https://calllocally.com/dashboard?userId=${user.id}" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
         <p style="font-size:13px;color:#999;margin-top:16px">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
     console.log(`Verified email sent to ${user.email}`);
-  } catch(e) { console.error('Verified email error:', e.message); }
+  } catch (e) { console.error('Verified email error:', e.message); }
+
   // Also text them — contractors check phone first
   if (user.business_phone && user.twilio_number) {
-    const dg = user.twilio_number.replace('+','').replace(/\D/g,'');
-    const cr = (user.carrier || 'other').toLowerCase();
-    const dc = cr === 'verizon' ? `*71${dg}` : `*61*${dg}**18#`;
+    // FIX [1g]: Use getCarrierInstructions for SMS too
     try {
       await twilioClient.messages.create({
-        body: `✅ Your CallLocally number is verified and ready! One last step: dial ${dc} from your phone, press Call. That's it — missed calls will now be captured automatically. Questions? Reply to this text.`,
+        body: `✅ Your CallLocally number is verified and ready! One last step: dial ${ci.dialCode} from your phone, press Call. That's it — missed calls will now be captured automatically. Questions? Reply to this text.`,
         from: getSenderNumber(user),
         to: user.business_phone
       });
-    } catch(e) { console.error('Verified SMS error:', e.message); }
+    } catch (e) { console.error('Verified SMS error:', e.message); }
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TFV WEBHOOK + POLLER
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── TFV STATUS WEBHOOK ──
+// FIX [2d]: Added basic authentication for TFV webhook
+// Twilio doesn't sign these the same way as call/SMS webhooks, so we use a shared secret
+app.post('/api/tfv-webhook', async (req, res) => {
+  // Verify webhook authenticity via shared secret header or Twilio signature
+  const webhookSecret = process.env.TFV_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const providedSecret = req.headers['x-tfv-secret'] || req.query.secret;
+    if (providedSecret !== webhookSecret) {
+      console.warn('Invalid TFV webhook secret from', req.ip);
+      return res.status(403).send('Forbidden');
+    }
+  } else {
+    // Fallback: validate Twilio signature if no dedicated secret is set
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const signature = req.headers['x-twilio-signature'];
+    if (signature) {
+      const url = `${RAILWAY_URL}${req.originalUrl}`;
+      const isValid = twilio.validateRequest(authToken, signature, url, req.body || {});
+      if (!isValid) {
+        console.warn('Invalid Twilio signature on TFV webhook from', req.ip);
+        return res.status(403).send('Forbidden');
+      }
+    } else {
+      console.warn('TFV webhook received without authentication — set TFV_WEBHOOK_SECRET env var');
+    }
+  }
+
+  const { TollfreePhoneNumber, Status } = req.body;
+  res.sendStatus(200); // Always ack immediately
+
+  if (!TollfreePhoneNumber || !Status) return;
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE twilio_number=$1', [TollfreePhoneNumber]);
+    const user = rows[0];
+    if (!user) return;
+
+    if (Status === 'TWILIO_APPROVED') {
+      // FIX [5 race]: Use a CAS-style update to prevent double-processing
+      const updateResult = await pool.query(
+        'UPDATE users SET trial_ends_at=$1, tfv_notified=TRUE WHERE id=$2 AND tfv_notified IS NOT TRUE RETURNING id',
+        [new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), user.id]
+      );
+      if (updateResult.rows.length === 0) {
+        console.log(`TFV approval for ${TollfreePhoneNumber} already processed — skipping`);
+        return;
+      }
+      console.log(`TFV approved for ${TollfreePhoneNumber} (user: ${user.email})`);
+      const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
+      await sendVerifiedEmail(fresh);
+    } else if (Status === 'TWILIO_REJECTED') {
+      await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1 AND tfv_notified IS NOT TRUE', [user.id]);
+      console.log(`TFV rejected for ${TollfreePhoneNumber} (user: ${user.email})`);
+      if (process.env.SENDGRID_API_KEY) {
+        try {
+          await sgMail.send({
+            to: user.email, from: 'hello@calllocally.com',
+            subject: 'Action needed: your CallLocally number verification',
+            html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>`
+          });
+        } catch (e) { console.error('Rejection email:', e.message); }
+      }
+    }
+  } catch (err) {
+    console.error('TFV webhook processing error:', err.message);
+  }
+});
+
+
+// ── TFV STATUS POLLER ──
+// FIX [1a/8a]: Single definition, single setInterval/setTimeout
+async function checkTFVStatus() {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL) AND paid = FALSE"
+    );
+    if (!rows.length) return;
+    const auth = 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+
+    for (const user of rows) {
+      try {
+        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encodeURIComponent(user.twilio_number)}`, { headers: { 'Authorization': auth } });
+
+        // FIX [8d]: Handle Twilio API errors gracefully
+        if (!r.ok) {
+          console.error(`TFV API error for ${user.twilio_number}: HTTP ${r.status}`);
+          continue; // Skip this user, try again next cycle
+        }
+
+        const d = await r.json();
+        const v = d.verifications?.[0];
+        if (!v) continue;
+
+        if (v.status === 'TWILIO_APPROVED') {
+          // FIX [5 race]: CAS-style update to prevent double-processing with webhook
+          const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+          const updateResult = await pool.query(
+            'UPDATE users SET tfv_notified=TRUE, trial_ends_at=$2 WHERE id=$1 AND tfv_notified IS NOT TRUE RETURNING id',
+            [user.id, trialEnd]
+          );
+          if (updateResult.rows.length === 0) {
+            console.log(`TFV for ${user.twilio_number} already handled — skipping`);
+            continue;
+          }
+          const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
+          await sendVerifiedEmail(fresh);
+          console.log(`TFV approved + trial started: ${user.twilio_number}`);
+        } else if (v.status === 'TWILIO_REJECTED') {
+          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1 AND tfv_notified IS NOT TRUE', [user.id]);
+          if (process.env.SENDGRID_API_KEY) {
+            try {
+              await sgMail.send({
+                to: user.email, from: 'hello@calllocally.com',
+                subject: 'Action needed: your CallLocally number verification',
+                html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>`
+              });
+            } catch (e) { console.error('Rejection email:', e.message); }
+          }
+        }
+      } catch (e) { console.error(`TFV check ${user.twilio_number}:`, e.message); }
+    }
+  } catch (e) { console.error('TFV poller error:', e.message); }
+}
+
 // ── TRIAL CHECK ──
+// FIX [8b]: Add LIMIT to avoid fetching entire user table at scale
 async function checkTrials() {
   try {
-    const { rows } = await pool.query('SELECT * FROM users WHERE paid=FALSE');
+    const { rows } = await pool.query(`
+      SELECT * FROM users
+      WHERE paid=FALSE AND trial_ends_at IS NOT NULL
+      ORDER BY trial_ends_at ASC
+      LIMIT 500
+    `);
     for (const user of rows) {
-      if (!user.trial_ends_at) continue;
       const daysLeftRaw = Math.ceil((new Date(user.trial_ends_at) - Date.now()) / 86400000);
       const daysLeft = daysLeftRaw < 0 ? 0 : daysLeftRaw;
-      if ([7,1,0].includes(daysLeft) && user.last_trial_notification !== daysLeft) {
+      if ([7, 1, 0].includes(daysLeft) && user.last_trial_notification !== daysLeft) {
         await sendTrialEmail(user, daysLeft);
         if (daysLeft === 0 && user.twilio_number && user.business_phone) {
           try {
@@ -922,165 +1234,117 @@ async function checkTrials() {
               from: getSenderNumber(user),
               to: user.business_phone
             });
-          } catch(e) { console.error('Trial-end SMS error:', e.message); }
+          } catch (e) { console.error('Trial-end SMS error:', e.message); }
         }
         await pool.query('UPDATE users SET last_trial_notification=$1 WHERE id=$2', [daysLeft, user.id]);
       }
     }
-  } catch(e) { console.error('Trial check error:', e.message); }
+  } catch (e) { console.error('Trial check error:', e.message); }
 }
-// ── TFV STATUS POLLER ──
-async function checkTFVStatus() {
-  try {
-    const { rows } = await pool.query(
-      "SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL) AND paid = FALSE"
-    );
-    if (!rows.length) return;
-    const auth = 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
-    for (const user of rows) {
-      try {
-        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encodeURIComponent(user.twilio_number)}`, { headers: { 'Authorization': auth } });
-        const d = await r.json();
-        const v = d.verifications?.[0];
-        if (!v) continue;
-        if (v.status === 'TWILIO_APPROVED') {
-          const trialEnd = new Date(Date.now() + 14*24*60*60*1000);
-          await pool.query('UPDATE users SET tfv_notified=TRUE, trial_ends_at=$2 WHERE id=$1', [user.id, trialEnd]);
-          const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
-          await sendVerifiedEmail(fresh); // sends email + SMS
-          console.log(`TFV approved: ${user.twilio_number} — trial started for ${user.email}`);
-        } else if (v.status === 'TWILIO_REJECTED') {
-          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-          if (process.env.SENDGRID_API_KEY) {
-            await sgMail.send({ to: user.email, from: 'hello@calllocally.com',
-              subject: 'Action needed: your CallLocally number verification',
-              html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>`
-            }).catch(e => console.error('Rejection email:', e.message));
-          }
-        }
-      } catch(e) { console.error(`TFV check ${user.twilio_number}:`, e.message); }
-    }
-  } catch(e) { console.error('TFV poller error:', e.message); }
-}
-setInterval(checkTFVStatus, 60*60*1000);
+
+// FIX [1a/8a]: Single setInterval/setTimeout for each cron — no duplicates
+setInterval(checkTFVStatus, 60 * 60 * 1000);
 setTimeout(checkTFVStatus, 15000);
 
-// ── TFV STATUS POLLER ──
-async function checkTFVStatus() {
-  try {
-    const { rows } = await pool.query("SELECT * FROM users WHERE twilio_number IS NOT NULL AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL) AND paid=FALSE");
-    if (!rows.length) return;
-    const auth = 'Basic ' + Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
-    for (const user of rows) {
-      try {
-        const r = await fetch(`https://messaging.twilio.com/v1/Tollfree/Verifications?TollfreePhoneNumber=${encodeURIComponent(user.twilio_number)}`, { headers: { 'Authorization': auth } });
-        const d = await r.json();
-        const v = d.verifications?.[0];
-        if (!v) continue;
-        if (v.status === 'TWILIO_APPROVED') {
-          const trialEnd = new Date(Date.now() + 14*24*60*60*1000);
-          await pool.query('UPDATE users SET tfv_notified=TRUE, trial_ends_at=$2 WHERE id=$1', [user.id, trialEnd]);
-          const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
-          await sendVerifiedEmail(fresh);
-          console.log(`TFV approved + trial started: ${user.twilio_number}`);
-        } else if (v.status === 'TWILIO_REJECTED') {
-          await pool.query('UPDATE users SET tfv_notified=TRUE WHERE id=$1', [user.id]);
-          if (process.env.SENDGRID_API_KEY) await sgMail.send({ to: user.email, from: 'hello@calllocally.com', subject: 'Action needed: your CallLocally number verification', html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#FF5C1A">Verification needs attention</h2><p>Hey ${user.name}, there was an issue verifying your number. Our team will reach out within 1 business day.</p></div>` }).catch(e => console.error('Rejection email:', e.message));
-        }
-      } catch(e) { console.error(`TFV check ${user.twilio_number}:`, e.message); }
-    }
-  } catch(e) { console.error('TFV poller error:', e.message); }
-}
-setInterval(checkTFVStatus, 60*60*1000);
-setTimeout(checkTFVStatus, 15000);
-
-setInterval(checkTrials, 60*60*1000);
+setInterval(checkTrials, 60 * 60 * 1000);
 setTimeout(checkTrials, 8000);
 
 
-// ── ANALYTICS: Admin overview of all users + funnel ──
+// ══════════════════════════════════════════════════════════════════════════════
+// ANALYTICS (Admin)
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.get('/api/admin/analytics', async (req, res) => {
   const adminToken = req.headers['x-admin-token'];
   if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
 
-  const [usersR, leadsR, revenueR] = await Promise.all([
-    pool.query(`
-      SELECT
-        COUNT(*) as total_users,
-        COUNT(*) FILTER (WHERE paid = TRUE) as paid_users,
-        COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at > NOW()) as trial_users,
-        COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at < NOW()) as expired_users,
-        COUNT(*) FILTER (WHERE plan = 'solo') as solo_count,
-        COUNT(*) FILTER (WHERE plan = 'growth') as growth_count,
-        COUNT(*) FILTER (WHERE plan = 'team') as team_count,
-        COUNT(*) FILTER (WHERE trade = 'plumbing') as plumbing,
-        COUNT(*) FILTER (WHERE trade = 'hvac') as hvac,
-        COUNT(*) FILTER (WHERE trade = 'electrical') as electrical,
-        COUNT(*) FILTER (WHERE trade = 'roofing') as roofing,
-        COUNT(*) FILTER (WHERE trade = 'landscaping') as landscaping,
-        COUNT(*) FILTER (WHERE trade = 'pest') as pest,
-        COUNT(*) FILTER (WHERE trade = 'handyman') as handyman,
-        COUNT(*) FILTER (WHERE trade = 'painting') as painting,
-        COUNT(*) FILTER (WHERE trade = 'pool') as pool,
-        COUNT(*) FILTER (WHERE trade = 'general') as other_trade,
-        SUM(total_leads) as total_leads_all_time,
-        SUM(total_urgent) as total_urgent_all_time
-      FROM users
-    `),
-    pool.query(`
-      SELECT
-        COUNT(*) as total_leads,
-        COUNT(*) FILTER (WHERE status = 'captured') as captured,
-        COUNT(*) FILTER (WHERE status = 'waiting') as waiting,
-        COUNT(*) FILTER (WHERE urgent = TRUE) as urgent,
-        COUNT(*) FILTER (WHERE after_hours = TRUE) as after_hours,
-        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as last_7_days,
-        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as last_30_days
-      FROM leads
-    `),
-    pool.query(`
-      SELECT
-        COALESCE(SUM(CASE plan WHEN 'solo' THEN 49 WHEN 'growth' THEN 79 WHEN 'team' THEN 129 ELSE 0 END), 0) as mrr
-      FROM users WHERE paid = TRUE
-    `),
-  ]);
+  try {
+    const [usersR, leadsR, revenueR] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*) as total_users,
+          COUNT(*) FILTER (WHERE paid = TRUE) as paid_users,
+          COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at > NOW()) as trial_users,
+          COUNT(*) FILTER (WHERE paid = FALSE AND trial_ends_at < NOW()) as expired_users,
+          COUNT(*) FILTER (WHERE plan = 'solo') as solo_count,
+          COUNT(*) FILTER (WHERE plan = 'growth') as growth_count,
+          COUNT(*) FILTER (WHERE plan = 'team') as team_count,
+          COUNT(*) FILTER (WHERE trade = 'plumbing') as plumbing,
+          COUNT(*) FILTER (WHERE trade = 'hvac') as hvac,
+          COUNT(*) FILTER (WHERE trade = 'electrical') as electrical,
+          COUNT(*) FILTER (WHERE trade = 'roofing') as roofing,
+          COUNT(*) FILTER (WHERE trade = 'landscaping') as landscaping,
+          COUNT(*) FILTER (WHERE trade = 'pest') as pest,
+          COUNT(*) FILTER (WHERE trade = 'handyman') as handyman,
+          COUNT(*) FILTER (WHERE trade = 'painting') as painting,
+          COUNT(*) FILTER (WHERE trade = 'pool') as pool_trade,
+          COUNT(*) FILTER (WHERE trade = 'general') as other_trade,
+          SUM(total_leads) as total_leads_all_time,
+          SUM(total_urgent) as total_urgent_all_time
+        FROM users
+      `),
+      pool.query(`
+        SELECT
+          COUNT(*) as total_leads,
+          COUNT(*) FILTER (WHERE status = 'captured') as captured,
+          COUNT(*) FILTER (WHERE status = 'pending') as pending,
+          COUNT(*) FILTER (WHERE urgent = TRUE) as urgent,
+          COUNT(*) FILTER (WHERE after_hours = TRUE) as after_hours,
+          COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as last_7_days,
+          COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as last_30_days
+        FROM leads
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(SUM(CASE plan WHEN 'solo' THEN 49 WHEN 'growth' THEN 79 WHEN 'team' THEN 129 ELSE 0 END), 0) as mrr
+        FROM users WHERE paid = TRUE
+      `),
+    ]);
 
-  const users = usersR.rows[0];
-  const leads = leadsR.rows[0];
-  const revenue = revenueR.rows[0];
+    const users = usersR.rows[0];
+    const leads = leadsR.rows[0];
+    const revenue = revenueR.rows[0];
 
-  res.json({
-    users: {
-      total: parseInt(users.total_users),
-      paid: parseInt(users.paid_users),
-      trial: parseInt(users.trial_users),
-      expired: parseInt(users.expired_users),
-      byPlan: { solo: parseInt(users.solo_count), growth: parseInt(users.growth_count), team: parseInt(users.team_count) },
-      byTrade: {
-        plumbing: parseInt(users.plumbing), hvac: parseInt(users.hvac), electrical: parseInt(users.electrical),
-        roofing: parseInt(users.roofing), landscaping: parseInt(users.landscaping), pest: parseInt(users.pest),
-        handyman: parseInt(users.handyman), painting: parseInt(users.painting), pool: parseInt(users.pool),
-        other: parseInt(users.other_trade),
+    res.json({
+      users: {
+        total: parseInt(users.total_users),
+        paid: parseInt(users.paid_users),
+        trial: parseInt(users.trial_users),
+        expired: parseInt(users.expired_users),
+        byPlan: { solo: parseInt(users.solo_count), growth: parseInt(users.growth_count), team: parseInt(users.team_count) },
+        byTrade: {
+          plumbing: parseInt(users.plumbing), hvac: parseInt(users.hvac), electrical: parseInt(users.electrical),
+          roofing: parseInt(users.roofing), landscaping: parseInt(users.landscaping), pest: parseInt(users.pest),
+          handyman: parseInt(users.handyman), painting: parseInt(users.painting), pool: parseInt(users.pool_trade),
+          other: parseInt(users.other_trade),
+        },
       },
-    },
-    leads: {
-      total: parseInt(leads.total_leads),
-      captured: parseInt(leads.captured),
-      waiting: parseInt(leads.waiting),
-      urgent: parseInt(leads.urgent),
-      afterHours: parseInt(leads.after_hours),
-      last7Days: parseInt(leads.last_7_days),
-      last30Days: parseInt(leads.last_30_days),
-    },
-    revenue: {
-      mrr: parseInt(revenue.mrr),
-      arr: parseInt(revenue.mrr) * 12,
-    },
-    generatedAt: new Date().toISOString(),
-  });
+      leads: {
+        total: parseInt(leads.total_leads),
+        captured: parseInt(leads.captured),
+        pending: parseInt(leads.pending),
+        urgent: parseInt(leads.urgent),
+        afterHours: parseInt(leads.after_hours),
+        last7Days: parseInt(leads.last_7_days),
+        last30Days: parseInt(leads.last_30_days),
+      },
+      revenue: {
+        mrr: parseInt(revenue.mrr),
+        arr: parseInt(revenue.mrr) * 12,
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Analytics error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
 });
 
-// ── STATIC FILES ──
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATIC FILES
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.get('/dashboard', (req, res) => {
   const p = path.join(__dirname, 'public', 'dashboard.html');
   fs.existsSync(p) ? res.sendFile(p) : res.status(404).send('Not found');
@@ -1091,12 +1355,16 @@ app.get('*', (req, res) => {
   fs.existsSync(p) ? res.sendFile(p) : res.send('CallLocally is running.');
 });
 
-// ── START ──
+
+// ══════════════════════════════════════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════════════════════════════════════
+
 const PORT = process.env.PORT || 3000;
+// FIX [7e]: If DB init fails, do NOT start accepting traffic — crash and let Railway retry
 initDB().then(() => {
   app.listen(PORT, () => console.log(`CallLocally running on port ${PORT}`));
 }).catch(err => {
-  console.error('DB init failed:', err.message);
-  // Start anyway — DB may not be ready yet on first deploy
-  app.listen(PORT, () => console.log(`CallLocally running (no DB) on port ${PORT}`));
+  console.error('DB init failed — NOT starting server:', err.message);
+  process.exit(1);
 });
