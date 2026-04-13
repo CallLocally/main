@@ -434,10 +434,10 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
   const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
   const sms = `📱 Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
   try {
-    await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: user.business_phone });
+    await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone });
     if (user.plan === 'team' && Array.isArray(user.team_phones)) {
       for (const phone of user.team_phones) {
-        try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: phone }); } catch(e) {}
+        try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); } catch(e) {}
       }
     }
   } catch(e) { console.error('Voicemail SMS:', e.message); }
@@ -513,7 +513,7 @@ app.post('/api/dial-complete', async (req, res) => {
   const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
   const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
   try {
-    await twilioClient.messages.create({ body: message, from: user.twilio_number, to: callerNum });
+    await twilioClient.messages.create({ body: message, from: getSenderNumber(user), to: callerNum });
     await pool.query('INSERT INTO leads (id, user_id, caller_phone, after_hours) VALUES ($1,$2,$3,$4)',
       [uuidv4(), user.id, callerNum, isAH]);
     await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [user.id]);
@@ -555,7 +555,7 @@ app.post('/api/call-status', validateTwilio, async (req, res) => {
     : (user.custom_message || defaultMsg);
 
   try {
-    await twilioClient.messages.create({ body: message, from: user.twilio_number, to: Caller });
+    await twilioClient.messages.create({ body: message, from: getSenderNumber(user), to: Caller });
     await pool.query(`
       INSERT INTO leads (id, user_id, caller_phone, after_hours)
       VALUES ($1,$2,$3,$4)
@@ -652,12 +652,12 @@ async function notifyContractor(user, lead) {
   const flag = lead.urgent ? '🚨 URGENT — ' : '';
   const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service||'See reply'}\nAddress: ${lead.address||'Ask when you call'}${lead.after_hours?' \n⏰ After hours':''}`;
   // Send to primary number
-  try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: user.business_phone }); }
+  try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
   catch(e) { console.error('Contractor SMS:', e.message); }
   // Team plan: also send to additional team members
   if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
     for (const phone of user.team_phones) {
-      try { await twilioClient.messages.create({ body: sms, from: user.twilio_number, to: phone }); }
+      try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); }
       catch(e) { console.error('Team SMS error:', e.message); }
     }
   }
@@ -891,7 +891,7 @@ async function sendVerifiedEmail(user) {
     try {
       await twilioClient.messages.create({
         body: `✅ Your CallLocally number is verified and ready! One last step: dial ${dc} from your phone, press Call. That's it — missed calls will now be captured automatically. Questions? Reply to this text.`,
-        from: user.twilio_number,
+        from: getSenderNumber(user),
         to: user.business_phone
       });
     } catch(e) { console.error('Verified SMS error:', e.message); }
@@ -912,7 +912,7 @@ async function checkTrials() {
           try {
             await twilioClient.messages.create({
               body: `⏰ Your CallLocally trial has ended. Don't lose your leads — upgrade at calllocally.com/dashboard. Solo plan is just $49/mo. Questions? Reply here.`,
-              from: user.twilio_number,
+              from: getSenderNumber(user),
               to: user.business_phone
             });
           } catch(e) { console.error('Trial-end SMS error:', e.message); }
