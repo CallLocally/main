@@ -1107,8 +1107,7 @@ async function handleSignup() {
   const businessPhone = document.getElementById('f-phone').value.trim();
   const trade = document.getElementById('f-trade').value;
   const carrier = document.getElementById('f-carrier').value;
-      const smsConsent = document.getElementById('f-sms-consent').checked;
-      if (!smsConsent) { formError.textContent = 'You must agree to SMS messaging terms'; formError.style.display = 'block'; btn.disabled = false; btn.textContent = 'Get My CallLocally Number'; return; }
+      
       const smsConsent = document.getElementById('f-sms-consent').checked;
       if (!smsConsent) { formError.textContent = 'You must agree to SMS messaging terms'; formError.style.display = 'block'; btn.disabled = false; btn.textContent = 'Get My CallLocally Number'; return; }
   const errEl = document.getElementById('form-error');
