@@ -205,7 +205,7 @@ footer a:hover{color:var(--white)}
   <p class="hero-sub">CallLocally texts them back in 60 seconds, captures the lead, and delivers it straight to your phone  while you keep working.</p>
   <div class="hero-pill">
     <div class="hero-pill-check"></div>
-    <span>Your existing number &nbsp;&middot;&nbsp; Verified in 1â3 days &nbsp;&middot;&nbsp; Then live in 5 min</span>
+    <span>Your existing number &nbsp;&middot;&nbsp; Verified in 1Ã¢ÂÂ3 days &nbsp;&middot;&nbsp; Then live in 5 min</span>
   </div>
   <div class="hero-actions">
     <button class="btn btn-orange btn-lg" onclick="openModal()">Start 14-Day Free Trial</button>
@@ -529,7 +529,7 @@ footer a:hover{color:var(--white)}
       <div style="background:rgba(255,92,26,0.1);border:1px solid rgba(255,92,26,0.3);border-radius:10px;padding:16px;margin-top:20px;text-align:left">
         <p style="font-size:13px;font-weight:700;color:#FF5C1A;margin:0 0 6px">&#9203; Step 1 of 2: Verification in progress</p>
         <p style="font-size:13px;color:var(--muted);margin:0;line-height:1.6">
-          Your number is being verified by US carriers. This takes <b style="color:var(--text)">1â3 business days</b>.
+          Your number is being verified by US carriers. This takes <b style="color:var(--text)">1Ã¢ÂÂ3 business days</b>.
           Once approved, we'll email you with your final setup instructions (takes 1 minute).
         </p>
       </div>
@@ -538,7 +538,7 @@ footer a:hover{color:var(--white)}
         <b style="color:var(--white)">While you wait:</b><br><br>
         &#128241; Check your email for confirmation<br>
         &#128202; Explore your <a href="/dashboard" style="color:#FF5C1A">dashboard</a><br>
-        &#128337; Setup instructions arrive in 1â3 business days
+        &#128337; Setup instructions arrive in 1Ã¢ÂÂ3 business days
       </div>
 
       <button class="submit-btn" style="margin-top:20px" onclick="window.location.href='/dashboard'">Go to Dashboard &rarr;</button>
@@ -1064,7 +1064,7 @@ footer a:hover{color:var(--white)}
     </div>
 
     <div class="success-screen" id="success-screen">
-      <div style="font-size:48px;margin-bottom:8px">ÃÂ</div>
+      <div style="font-size:48px;margin-bottom:8px">ÃÂÃÂ</div>
       <h2 style="color:var(--white);font-size:22px;margin-bottom:6px">You're almost live!</h2>
       <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Your CallLocally toll-free number:</p>
       <div class="success-num" id="success-num">Loading...</div>
@@ -1103,6 +1103,8 @@ async function handleSignup() {
   const businessPhone = document.getElementById('f-phone').value.trim();
   const trade = document.getElementById('f-trade').value;
   const carrier = document.getElementById('f-carrier').value;
+      const smsConsent = document.getElementById('f-sms-consent').checked;
+      if (!smsConsent) { formError.textContent = 'You must agree to SMS messaging terms'; formError.style.display = 'block'; btn.disabled = false; btn.textContent = 'Get My CallLocally Number'; return; }
       const smsConsent = document.getElementById('f-sms-consent').checked;
       if (!smsConsent) { formError.textContent = 'You must agree to SMS messaging terms'; formError.style.display = 'block'; btn.disabled = false; btn.textContent = 'Get My CallLocally Number'; return; }
   const errEl = document.getElementById('form-error');
