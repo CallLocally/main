@@ -1,7 +1,7 @@
-// ══════════════════════════════════════════════════════════════════════════════
-// CallLocally — server.js (FIXED)
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// CallLocally â server.js (FIXED)
 // All audit fixes applied. See FIX comments throughout.
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const express = require('express');
 const twilio = require('twilio');
@@ -17,16 +17,16 @@ const fs = require('fs');
 const app = express();
 app.set('trust proxy', 1); // Railway runs behind a proxy
 
-// ── SECURITY MIDDLEWARE ──
+// ââ SECURITY MIDDLEWARE ââ
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: ['https://calllocally.com', 'https://main-production-147d.up.railway.app'] }));
 
-// Stripe webhook needs raw body — must be before express.json()
+// Stripe webhook needs raw body â must be before express.json()
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
-// ── RATE LIMITING ──
+// ââ RATE LIMITING ââ
 const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 5,
   message: { error: 'Too many signups from this IP, try again later' },
@@ -37,7 +37,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
 });
 
-// FIX [2f]: Separate rate limiter for Twilio webhooks — much higher ceiling
+// FIX [2f]: Separate rate limiter for Twilio webhooks â much higher ceiling
 // so legitimate call bursts don't get blocked, but still prevents abuse
 const twilioWebhookLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 1000,
@@ -67,7 +67,7 @@ const PLANS = {
   team:   { name: 'Team',   price: 12900, priceId: process.env.STRIPE_PRICE_TEAM },
 };
 
-// ── POSTGRES ──
+// ââ POSTGRES ââ
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
@@ -76,7 +76,7 @@ const pool = new Pool({
 // FIX [7d]: Global error handlers to prevent silent crashes
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err.message, err.stack);
-  // Don't exit — Railway will restart, but we lose in-flight requests
+  // Don't exit â Railway will restart, but we lose in-flight requests
   // In production, you'd want to drain and restart gracefully
 });
 process.on('unhandledRejection', (reason) => {
@@ -120,6 +120,7 @@ async function initDB() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS carrier TEXT DEFAULT 'other';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_notified BOOLEAN DEFAULT FALSE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tfv_submission_failed BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
@@ -164,9 +165,9 @@ async function initDB() {
   console.log('DB initialized');
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // HELPER FUNCTIONS
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 function getSenderNumber(user) {
   // FIX [1f]: Removed dead reference to user.tfv_status (column doesn't exist)
@@ -179,7 +180,7 @@ function formatPhone(raw) {
   return d.startsWith('1') ? `+${d}` : `+1${d}`;
 }
 
-// ── CARRIER FORWARDING CODES ──
+// ââ CARRIER FORWARDING CODES ââ
 // FIX [1g]: Single source of truth for carrier forwarding codes
 function getCarrierInstructions(carrier, twilioNumber) {
   const digits = twilioNumber.replace('+', '').replace(/\D/g, '');
@@ -211,31 +212,31 @@ function getCarrierInstructions(carrier, twilioNumber) {
   return instructions[carrier] || instructions.other;
 }
 
-// ── TRADE-SPECIFIC MESSAGES ──
+// ââ TRADE-SPECIFIC MESSAGES ââ
 function getTradeMessage(businessName, trade, afterHours = false) {
   const biz = businessName;
   const ah = afterHours;
   const base = {
-    plumbing:    ah ? `Hi! This is ${biz} — we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
-                    : `Hi! This is ${biz} — we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
-    hvac:        ah ? `Hi! This is ${biz} — we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
-    electrical:  ah ? `Hi! This is ${biz} — we're closed. What's the electrical issue and your address? We call back emergencies 24/7 — reply URGENT if needed.`
-                    : `Hi! This is ${biz} — on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
-    roofing:     ah ? `Hi! This is ${biz} — closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} — missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
-    landscaping: ah ? `Hi! This is ${biz} — closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
-                    : `Hi! This is ${biz} — on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
-    pest:        ah ? `Hi! This is ${biz} — closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
-    handyman:    ah ? `Hi! This is ${biz} — closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
-                    : `Hi! This is ${biz} — on a job. What do you need fixed or built, and what's the address?`,
-    painting:    ah ? `Hi! This is ${biz} — closed for the day. What painting project do you have in mind and what's the address?`
-                    : `Hi! This is ${biz} — missed your call. Interior or exterior painting? And what's the address?`,
-    pool:        ah ? `Hi! This is ${biz} — closed right now. What's the pool issue and your address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} — on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
-    general:     ah ? `Hi! This is ${biz} — we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
-                    : `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
+    plumbing:    ah ? `Hi! This is ${biz} â we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
+                    : `Hi! This is ${biz} â we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
+    hvac:        ah ? `Hi! This is ${biz} â we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} â missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
+    electrical:  ah ? `Hi! This is ${biz} â we're closed. What's the electrical issue and your address? We call back emergencies 24/7 â reply URGENT if needed.`
+                    : `Hi! This is ${biz} â on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
+    roofing:     ah ? `Hi! This is ${biz} â closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} â missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
+    landscaping: ah ? `Hi! This is ${biz} â closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
+                    : `Hi! This is ${biz} â on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
+    pest:        ah ? `Hi! This is ${biz} â closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
+                    : `Hi! This is ${biz} â missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
+    handyman:    ah ? `Hi! This is ${biz} â closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
+                    : `Hi! This is ${biz} â on a job. What do you need fixed or built, and what's the address?`,
+    painting:    ah ? `Hi! This is ${biz} â closed for the day. What painting project do you have in mind and what's the address?`
+                    : `Hi! This is ${biz} â missed your call. Interior or exterior painting? And what's the address?`,
+    pool:        ah ? `Hi! This is ${biz} â closed right now. What's the pool issue and your address? We'll follow up in the morning.`
+                    : `Hi! This is ${biz} â on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
+    general:     ah ? `Hi! This is ${biz} â we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
+                    : `Hi! This is ${biz} â missed your call. What service do you need and what's your address?`,
   };
   return base[trade] || base.general;
 }
@@ -244,7 +245,7 @@ function isActive(user) {
   if (user.paid) return true;
   if (user.paid_through && new Date(user.paid_through) > new Date()) return true;
   if (user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  // FIX [1e]: Also check for tfv_submission_failed — don't keep broken users active forever
+  // FIX [1e]: Also check for tfv_submission_failed â don't keep broken users active forever
   if (!user.trial_ends_at && !user.paid && user.tfv_notified !== true && user.tfv_submission_failed !== true) return true;
   return false;
 }
@@ -261,7 +262,7 @@ function isBusinessHours(user) {
   return hour >= startHour && hour < endHour;
 }
 
-// ── TWILIO SIGNATURE VALIDATION ──
+// ââ TWILIO SIGNATURE VALIDATION ââ
 function validateTwilio(req, res, next) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const signature = req.headers['x-twilio-signature'];
@@ -280,7 +281,7 @@ function twimlError(res, message = 'Sorry, a system error occurred. Please try a
   return res.send(`<?xml version="1.0"?><Response><Say voice="Polly.Joanna">${message}</Say></Response>`);
 }
 
-// ── DASHBOARD AUTH ──
+// ââ DASHBOARD AUTH ââ
 // FIX [7a]: Wrap in try/catch so DB errors don't crash the server
 async function requireAuth(req, res, next) {
   try {
@@ -297,11 +298,11 @@ async function requireAuth(req, res, next) {
 }
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // TOLL-FREE VERIFICATION
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-// FIX [1a]: Single definition — removed duplicate
+// FIX [1a]: Single definition â removed duplicate
 async function submitTollFreeVerification(user) {
   const TSID = process.env.TWILIO_ACCOUNT_SID;
   const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -326,7 +327,7 @@ async function submitTollFreeVerification(user) {
     BusinessContactPhone: user.businessPhone || user.business_phone || user.twilioNumber,
     UseCaseCategories: 'ACCOUNT_NOTIFICATIONS',
     UseCaseSummary: `CallLocally sends automated SMS to missed callers on behalf of ${biz}, a home service contractor. When a customer calls and gets no answer, CallLocally texts them to capture their service need and address. The contractor receives lead details via SMS and email. No marketing messages.`,
-    ProductionMessageSample: `Hi! This is ${biz} — missed your call. What service do you need and what's your address?`,
+    ProductionMessageSample: `Hi! This is ${biz} â missed your call. What service do you need and what's your address?`,
     OptInType: 'VERBAL',
     OptInImageUrls: 'https://calllocally.com',
     MessageVolume: '10',
@@ -356,14 +357,15 @@ async function submitTollFreeVerification(user) {
 }
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // SIGNUP
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.post('/api/signup', signupLimiter, async (req, res) => {
-  const { name, email, businessName, businessPhone, trade, carrier } = req.body;
+  const { name, email, businessName, businessPhone, trade, carrier, smsConsent } = req.body;
   if (!name || !email || !businessName || !businessPhone)
     return res.status(400).json({ error: 'All fields required' });
+  if (!smsConsent) return res.status(400).json({ error: 'SMS consent is required' });
 
   const cleanEmail = email.toLowerCase().trim().slice(0, 255);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail))
@@ -389,12 +391,12 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     const authToken = uuidv4();
 
     await pool.query(`
-      INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at, carrier)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      INSERT INTO users (id, auth_token, name, email, business_name, business_phone, trade, twilio_number, custom_message, after_hours_message, trial_ends_at, carrier, sms_consent_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     `, [
       userId, authToken, name.slice(0, 100), cleanEmail, businessName.slice(0, 200),
       formattedPhone, trade || 'general', purchased.phoneNumber,
-      null, null, null, carrier || 'other',
+      null, null, null, carrier || 'other', new Date().toISOString(),
     ]);
 
     await sendWelcomeEmail({ name, email: cleanEmail, businessName, twilioNumber: purchased.phoneNumber, id: userId, authToken, carrier: carrier || 'other' });
@@ -407,10 +409,10 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     });
     if (!tfvSuccess) {
       await pool.query('UPDATE users SET tfv_submission_failed=TRUE WHERE id=$1', [userId]);
-      console.error(`TFV submission failed for ${cleanEmail} — flagged for manual review`);
+      console.error(`TFV submission failed for ${cleanEmail} â flagged for manual review`);
     }
 
-    console.log(`Signup: ${businessName} → ${purchased.phoneNumber}`);
+    console.log(`Signup: ${businessName} â ${purchased.phoneNumber}`);
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
   } catch (err) {
     console.error('Signup error:', err.message);
@@ -420,9 +422,9 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // STRIPE
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.post('/api/create-checkout', async (req, res) => {
   if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
@@ -486,7 +488,7 @@ app.post('/api/billing-portal', async (req, res) => {
   }
 });
 
-// ── STRIPE WEBHOOK (idempotent) ──
+// ââ STRIPE WEBHOOK (idempotent) ââ
 app.post('/api/stripe-webhook', async (req, res) => {
   if (!stripe) return res.status(500).send('Stripe not configured');
   let event;
@@ -549,18 +551,18 @@ app.post('/api/stripe-webhook', async (req, res) => {
     }
   } catch (err) {
     console.error('Stripe webhook processing error:', err.message);
-    // Still return 200 — we've recorded the event ID, and returning 4xx/5xx
+    // Still return 200 â we've recorded the event ID, and returning 4xx/5xx
     // causes Stripe to retry, which could double-process
   }
   res.json({ received: true });
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
-// CALL FLOW — TWILIO WEBHOOKS
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// CALL FLOW â TWILIO WEBHOOKS
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-// ── VOICEMAIL RECORDING COMPLETE ──
+// ââ VOICEMAIL RECORDING COMPLETE ââ
 app.post('/api/voicemail', validateTwilio, async (req, res) => {
   try {
     const { RecordingUrl, RecordingDuration, Called, To: ToVM, Caller, RecordingSid } = req.body;
@@ -574,7 +576,7 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
     const duration = parseInt(RecordingDuration) || 0;
     if (duration < 2) return res.status(200).send('OK');
 
-    // Check for existing pending lead from this caller (not 'waiting' — status is 'pending')
+    // Check for existing pending lead from this caller (not 'waiting' â status is 'pending')
     // FIX [3 race condition]: Match on 'pending' status, not 'waiting' (which doesn't exist)
     const existingLead = await pool.query(`
       SELECT id FROM leads WHERE user_id=$1 AND caller_phone=$2 AND status='pending'
@@ -599,7 +601,7 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
     const durMins = Math.floor(duration / 60);
     const durSecs = duration % 60;
     const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
-    const sms = `📱 Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
+    const sms = `ð± Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
     try {
       await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone });
       if (user.plan === 'team' && Array.isArray(user.team_phones)) {
@@ -614,12 +616,12 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
       try {
         await sgMail.send({
           to: user.email, from: 'hello@calllocally.com',
-          subject: `📱 Voicemail from ${Caller} (${durStr})`,
+          subject: `ð± Voicemail from ${Caller} (${durStr})`,
           html: `<div style="font-family:sans-serif;max-width:480px">
             <h2 style="color:#FF5C1A">New Voicemail</h2>
             <p><b>From:</b> ${Caller}</p>
             <p><b>Duration:</b> ${durStr}</p>
-            <a href="${RecordingUrl}.mp3" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">▶ Play Voicemail</a>
+            <a href="${RecordingUrl}.mp3" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">â¶ Play Voicemail</a>
             <p style="margin-top:16px;font-size:13px;color:#888">You can also call back: <a href="tel:${Caller}">${Caller}</a></p>
           </div>`,
         });
@@ -631,7 +633,7 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
   res.status(200).send('OK');
 });
 
-// ── CALL FORWARDING ──
+// ââ CALL FORWARDING ââ
 // FIX [2c]: Added validateTwilio + twilioWebhookLimiter
 // FIX [7b]: Wrapped in try/catch with TwiML error fallback
 app.post('/api/forward', twilioWebhookLimiter, validateTwilio, async (req, res) => {
@@ -655,7 +657,7 @@ app.post('/api/forward', twilioWebhookLimiter, validateTwilio, async (req, res) 
   }
 });
 
-// ── DIAL COMPLETE ──
+// ââ DIAL COMPLETE ââ
 // FIX [2c]: Added validateTwilio + twilioWebhookLimiter
 // FIX [7b]: Wrapped in try/catch with TwiML error fallback
 app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req, res) => {
@@ -665,7 +667,7 @@ app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req,
     const calledNum = To || Called;
     const callerNum = From;
 
-    // Contractor answered — done
+    // Contractor answered â done
     if (DialCallStatus === 'completed') {
       return res.send('<?xml version="1.0"?><Response><Hangup/></Response>');
     }
@@ -693,8 +695,8 @@ app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req,
         ON CONFLICT (user_id, caller_phone) WHERE status = 'pending' DO NOTHING
       `, [uuidv4(), user.id, callerNum, isAH, senderNumber]);
 
-      // total_leads NOT incremented yet — only when customer replies
-      console.log(`Lead SMS sent (pending reply): ${callerNum} → ${user.business_name}`);
+      // total_leads NOT incremented yet â only when customer replies
+      console.log(`Lead SMS sent (pending reply): ${callerNum} â ${user.business_name}`);
     } catch (e) { console.error('Lead SMS error:', e.message); }
 
     // Play voicemail greeting and record
@@ -715,7 +717,7 @@ app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req,
   }
 });
 
-// ── CALL STATUS (safety valve — no longer sends SMS or creates leads) ──
+// ââ CALL STATUS (safety valve â no longer sends SMS or creates leads) ââ
 // FIX [1b/1c]: Gutted this handler. It was double-sending SMS and double-creating leads.
 // /api/dial-complete already handles the missed-call flow. This is kept only for logging.
 app.post('/api/call-status', validateTwilio, async (req, res) => {
@@ -727,7 +729,7 @@ app.post('/api/call-status', validateTwilio, async (req, res) => {
 });
 
 
-// ── INCOMING SMS (customer reply) ──
+// ââ INCOMING SMS (customer reply) ââ
 // FIX [1d/4]: Handles replies to BOTH the contractor's number AND the admin fallback number
 app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
   try {
@@ -797,7 +799,7 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
         address: addrMatch ? addrMatch[0] : row.address,
       };
       await notifyContractor(userForNotify, leadForNotify);
-      reply = urgent ? `Got it — urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
+      reply = urgent ? `Got it â urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
     }
 
     res.set('Content-Type', 'text/xml');
@@ -810,9 +812,9 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // DASHBOARD API
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/leads', requireAuth, async (req, res) => {
   try {
@@ -864,7 +866,7 @@ app.patch('/api/user/:userId', requireAuth, async (req, res) => {
   }
 });
 
-// ── ADMIN: USER LIST ──
+// ââ ADMIN: USER LIST ââ
 app.get('/api/admin/users', async (req, res) => {
   const adminToken = req.headers['x-admin-token'];
   if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
@@ -883,13 +885,13 @@ app.get('/api/admin/users', async (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // EMAIL HELPERS
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 async function notifyContractor(user, lead) {
-  const flag = lead.urgent ? '🚨 URGENT — ' : '';
-  const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Ask when you call'}${lead.after_hours ? ' \n⏰ After hours' : ''}`;
+  const flag = lead.urgent ? 'ð¨ URGENT â ' : '';
+  const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Ask when you call'}${lead.after_hours ? ' \nâ° After hours' : ''}`;
   try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
   catch (e) { console.error('Contractor SMS:', e.message); }
   if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
@@ -908,9 +910,9 @@ async function notifyContractor(user, lead) {
         <p><b>Caller:</b> ${lead.caller_phone}</p>
         <p><b>Service:</b> ${lead.service || 'Not specified'}</p>
         <p><b>Address:</b> ${lead.address || 'Ask when you call'}</p>
-        <p><b>Urgent:</b> ${lead.urgent ? 'Yes 🚨' : 'No'}</p>
-        ${lead.after_hours ? '<p><b>⏰ After hours lead</b></p>' : ''}
-        <a href="tel:${lead.caller_phone}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">📞 Call back now</a>
+        <p><b>Urgent:</b> ${lead.urgent ? 'Yes ð¨' : 'No'}</p>
+        ${lead.after_hours ? '<p><b>â° After hours lead</b></p>' : ''}
+        <a href="tel:${lead.caller_phone}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">ð Call back now</a>
       </div>`,
     });
   } catch (e) { console.error('Email:', e.message); }
@@ -928,15 +930,15 @@ async function sendWelcomeEmail(user) {
       to: user.email, from: 'hello@calllocally.com',
       subject: "You're signed up! Your CallLocally number is being verified",
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
-        <h2 style="color:#FF5C1A">Welcome, ${user.name}! 🎉</h2>
+        <h2 style="color:#FF5C1A">Welcome, ${user.name}! ð</h2>
         <p style="font-size:16px">Your CallLocally number is ready:</p>
         <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
         <p style="color:#555;font-size:14px">Callers can text or leave a voicemail at this number. Both get delivered to you instantly.</p>
 
         <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
 
-        <h3 style="margin-bottom:8px">Last step — forward your unanswered calls</h3>
-        <p style="color:#555;margin-bottom:20px;font-size:14px">Dial the code below from your ${ci.name} phone and press <b>Call</b>. Your phone still rings normally — if you don't pick up, the caller can leave a voicemail <i>or</i> text back. Either way, you get notified instantly.</p>
+        <h3 style="margin-bottom:8px">Last step â forward your unanswered calls</h3>
+        <p style="color:#555;margin-bottom:20px;font-size:14px">Dial the code below from your ${ci.name} phone and press <b>Call</b>. Your phone still rings normally â if you don't pick up, the caller can leave a voicemail <i>or</i> text back. Either way, you get notified instantly.</p>
 
         <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
           <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#FF5C1A;margin-bottom:10px">Dial this on your ${ci.name} phone</p>
@@ -948,8 +950,8 @@ async function sendWelcomeEmail(user) {
         <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
           <p style="font-size:13px;color:#555;margin:0">
             <b>How it works after setup:</b><br>
-            1. Customer calls your real number → rings you for 18 seconds<br>
-            2. If no answer → they hear a voicemail greeting<br>
+            1. Customer calls your real number â rings you for 18 seconds<br>
+            2. If no answer â they hear a voicemail greeting<br>
             3. They can leave a voicemail <b>or</b> reply via text<br>
             4. You get the voicemail recording + text transcript sent to your phone immediately<br><br>
             <b>To turn off forwarding later:</b> Dial <code>##61#</code> and press Call.
@@ -969,7 +971,7 @@ async function sendUpgradeEmail(user, plan) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: `You're on CallLocally ${planName} ✅`,
+      subject: `You're on CallLocally ${planName} â`,
       html: `<div style="font-family:sans-serif;max-width:480px">
         <h2 style="color:#FF5C1A">You're on ${planName}!</h2>
         <p>Hey ${user.name}, your ${planName} plan is active. Your number <b>${user.twilio_number}</b> is capturing leads.</p>
@@ -988,7 +990,7 @@ async function sendCancellationEmail(user, paidThrough) {
       html: `<div style="font-family:sans-serif;max-width:480px">
         <h2>Subscription cancelled</h2>
         <p>Hey ${user.name}, your subscription is cancelled. Service continues until <b>${endDate}</b>.</p>
-        <p><a href="https://calllocally.com/dashboard">Reactivate anytime →</a></p>
+        <p><a href="https://calllocally.com/dashboard">Reactivate anytime â</a></p>
       </div>`,
     });
   } catch (e) { console.error('Cancel email:', e.message); }
@@ -999,11 +1001,11 @@ async function sendPaymentFailedEmail(user) {
   try {
     await sgMail.send({
       to: user.email, from: 'hello@calllocally.com',
-      subject: '⚠️ Payment failed — update your card',
+      subject: 'â ï¸ Payment failed â update your card',
       html: `<div style="font-family:sans-serif;max-width:480px">
         <h2>Payment failed</h2>
         <p>Hey ${user.name}, please update your payment method to keep your number active.</p>
-        <a href="https://calllocally.com/dashboard" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Update payment →</a>
+        <a href="https://calllocally.com/dashboard" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Update payment â</a>
       </div>`,
     });
   } catch (e) { console.error('Payment failed email:', e.message); }
@@ -1013,9 +1015,9 @@ async function sendTrialEmail(user, daysLeft) {
   if (!process.env.SENDGRID_API_KEY) return;
   const link = `https://calllocally.com/dashboard?userId=${user.id}`;
   const configs = {
-    7: { subject: '⏰ 7 days left on your CallLocally trial', body: `<p>Hey ${user.name}, 7 days left. Solo is $49/mo — <a href="${link}">upgrade now</a>.</p>` },
-    1: { subject: '⚠️ Your trial ends tomorrow', body: `<p>Hey ${user.name}, trial ends tomorrow. <a href="${link}">Upgrade now →</a></p>` },
-    0: { subject: 'Your CallLocally trial has ended', body: `<p>Hey ${user.name}, trial ended. <a href="${link}">Reactivate →</a></p>` },
+    7: { subject: 'â° 7 days left on your CallLocally trial', body: `<p>Hey ${user.name}, 7 days left. Solo is $49/mo â <a href="${link}">upgrade now</a>.</p>` },
+    1: { subject: 'â ï¸ Your trial ends tomorrow', body: `<p>Hey ${user.name}, trial ends tomorrow. <a href="${link}">Upgrade now â</a></p>` },
+    0: { subject: 'Your CallLocally trial has ended', body: `<p>Hey ${user.name}, trial ended. <a href="${link}">Reactivate â</a></p>` },
   };
   if (!configs[daysLeft]) return;
   try {
@@ -1037,13 +1039,13 @@ async function sendVerifiedEmail(user) {
     await sgMail.send({
       to: user.email,
       from: 'hello@calllocally.com',
-      subject: '✅ Your CallLocally number is verified — finish setup in 1 minute',
+      subject: 'â Your CallLocally number is verified â finish setup in 1 minute',
       html: `<div style="font-family:sans-serif;max-width:520px;color:#1a1a1a">
-        <h2 style="color:#FF5C1A">You're verified! Last step 🎉</h2>
+        <h2 style="color:#FF5C1A">You're verified! Last step ð</h2>
         <p style="font-size:16px">Your CallLocally number is approved and ready to receive texts:</p>
         <p style="font-size:36px;font-weight:700;color:#FF5C1A;letter-spacing:2px;margin:8px 0">${num}</p>
 
-        <p style="color:#555;font-size:14px;margin-bottom:20px">Now just forward your unanswered calls to this number. Takes 1 minute. Your phone still rings normally — if you don't pick up, the caller hears a greeting and can leave a voicemail or text.</p>
+        <p style="color:#555;font-size:14px;margin-bottom:20px">Now just forward your unanswered calls to this number. Takes 1 minute. Your phone still rings normally â if you don't pick up, the caller hears a greeting and can leave a voicemail or text.</p>
 
         <div style="background:#fff8f5;border:2px solid #FF5C1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:16px">
           <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#FF5C1A;margin-bottom:10px">Dial this on your ${ci.name} phone</p>
@@ -1056,26 +1058,26 @@ async function sendVerifiedEmail(user) {
           <p style="font-size:13px;color:#555;margin:0">
             <b>To undo forwarding later:</b> Dial <code>##61#</code> and press Call.<br><br>
             <b>What happens after setup:</b><br>
-            1. Customer calls your real number → rings you for 18 seconds<br>
-            2. If no answer → they hear your voicemail greeting<br>
+            1. Customer calls your real number â rings you for 18 seconds<br>
+            2. If no answer â they hear your voicemail greeting<br>
             3. They leave a voicemail or text back<br>
             4. You get notified instantly via SMS and email
           </p>
         </div>
 
-        <a href="https://calllocally.com/dashboard?userId=${user.id}" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard →</a>
+        <a href="https://calllocally.com/dashboard?userId=${user.id}" style="display:inline-block;padding:12px 24px;background:#FF5C1A;color:white;border-radius:8px;text-decoration:none;font-weight:600">Go to Dashboard â</a>
         <p style="font-size:13px;color:#999;margin-top:16px">Questions? Reply to this email or reach us at hello@calllocally.com</p>
       </div>`,
     });
     console.log(`Verified email sent to ${user.email}`);
   } catch (e) { console.error('Verified email error:', e.message); }
 
-  // Also text them — contractors check phone first
+  // Also text them â contractors check phone first
   if (user.business_phone && user.twilio_number) {
     // FIX [1g]: Use getCarrierInstructions for SMS too
     try {
       await twilioClient.messages.create({
-        body: `✅ Your CallLocally number is verified and ready! One last step: dial ${ci.dialCode} from your phone, press Call. That's it — missed calls will now be captured automatically. Questions? Reply to this text.`,
+        body: `â Your CallLocally number is verified and ready! One last step: dial ${ci.dialCode} from your phone, press Call. That's it â missed calls will now be captured automatically. Questions? Reply to this text.`,
         from: getSenderNumber(user),
         to: user.business_phone
       });
@@ -1084,11 +1086,11 @@ async function sendVerifiedEmail(user) {
 }
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // TFV WEBHOOK + POLLER
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-// ── TFV STATUS WEBHOOK ──
+// ââ TFV STATUS WEBHOOK ââ
 // FIX [2d]: Added basic authentication for TFV webhook
 // Twilio doesn't sign these the same way as call/SMS webhooks, so we use a shared secret
 app.post('/api/tfv-webhook', async (req, res) => {
@@ -1112,7 +1114,7 @@ app.post('/api/tfv-webhook', async (req, res) => {
         return res.status(403).send('Forbidden');
       }
     } else {
-      console.warn('TFV webhook received without authentication — set TFV_WEBHOOK_SECRET env var');
+      console.warn('TFV webhook received without authentication â set TFV_WEBHOOK_SECRET env var');
     }
   }
 
@@ -1133,7 +1135,7 @@ app.post('/api/tfv-webhook', async (req, res) => {
         [new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), user.id]
       );
       if (updateResult.rows.length === 0) {
-        console.log(`TFV approval for ${TollfreePhoneNumber} already processed — skipping`);
+        console.log(`TFV approval for ${TollfreePhoneNumber} already processed â skipping`);
         return;
       }
       console.log(`TFV approved for ${TollfreePhoneNumber} (user: ${user.email})`);
@@ -1158,7 +1160,7 @@ app.post('/api/tfv-webhook', async (req, res) => {
 });
 
 
-// ── TFV STATUS POLLER ──
+// ââ TFV STATUS POLLER ââ
 // FIX [1a/8a]: Single definition, single setInterval/setTimeout
 async function checkTFVStatus() {
   try {
@@ -1190,7 +1192,7 @@ async function checkTFVStatus() {
             [user.id, trialEnd]
           );
           if (updateResult.rows.length === 0) {
-            console.log(`TFV for ${user.twilio_number} already handled — skipping`);
+            console.log(`TFV for ${user.twilio_number} already handled â skipping`);
             continue;
           }
           const fresh = (await pool.query('SELECT * FROM users WHERE id=$1', [user.id])).rows[0] || user;
@@ -1213,7 +1215,7 @@ async function checkTFVStatus() {
   } catch (e) { console.error('TFV poller error:', e.message); }
 }
 
-// ── TRIAL CHECK ──
+// ââ TRIAL CHECK ââ
 // FIX [8b]: Add LIMIT to avoid fetching entire user table at scale
 async function checkTrials() {
   try {
@@ -1231,7 +1233,7 @@ async function checkTrials() {
         if (daysLeft === 0 && user.twilio_number && user.business_phone) {
           try {
             await twilioClient.messages.create({
-              body: `⏰ Your CallLocally trial has ended. Don't lose your leads — upgrade at calllocally.com/dashboard. Solo plan is just $49/mo. Questions? Reply here.`,
+              body: `â° Your CallLocally trial has ended. Don't lose your leads â upgrade at calllocally.com/dashboard. Solo plan is just $49/mo. Questions? Reply here.`,
               from: getSenderNumber(user),
               to: user.business_phone
             });
@@ -1243,7 +1245,7 @@ async function checkTrials() {
   } catch (e) { console.error('Trial check error:', e.message); }
 }
 
-// FIX [1a/8a]: Single setInterval/setTimeout for each cron — no duplicates
+// FIX [1a/8a]: Single setInterval/setTimeout for each cron â no duplicates
 setInterval(checkTFVStatus, 60 * 60 * 1000);
 setTimeout(checkTFVStatus, 15000);
 
@@ -1251,9 +1253,9 @@ setInterval(checkTrials, 60 * 60 * 1000);
 setTimeout(checkTrials, 8000);
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // ANALYTICS (Admin)
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/admin/analytics', async (req, res) => {
   const adminToken = req.headers['x-admin-token'];
@@ -1342,9 +1344,9 @@ app.get('/api/admin/analytics', async (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // STATIC FILES
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/dashboard', (req, res) => {
   const p = path.join(__dirname, 'public', 'dashboard.html');
@@ -1357,15 +1359,15 @@ app.get('*', (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // START
-// ══════════════════════════════════════════════════════════════════════════════
+// ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 const PORT = process.env.PORT || 3000;
-// FIX [7e]: If DB init fails, do NOT start accepting traffic — crash and let Railway retry
+// FIX [7e]: If DB init fails, do NOT start accepting traffic â crash and let Railway retry
 initDB().then(() => {
   app.listen(PORT, () => console.log(`CallLocally running on port ${PORT}`));
 }).catch(err => {
-  console.error('DB init failed — NOT starting server:', err.message);
+  console.error('DB init failed â NOT starting server:', err.message);
   process.exit(1);
 });
