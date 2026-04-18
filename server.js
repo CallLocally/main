@@ -57,6 +57,20 @@ app.use('/api/billing-portal', apiLimiter);
 const RAILWAY_URL = process.env.RAILWAY_URL || 'https://calllocally.com';
 const ADMIN_TWILIO_NUMBER = process.env.ADMIN_TWILIO_NUMBER || '+19497968059';
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+// FIX [A2P 10DLC]: smsCreate wraps twilioClient.messages.create so outbound SMS
+// goes through the A2P-registered Messaging Service pool when one is configured.
+// Without this wrapper, carriers reject all messages (error 30034).
+// When TWILIO_MESSAGING_SERVICE_SID is set, the `from:` is stripped and Twilio
+// picks a sender from the service pool (using sticky-sender rules).
+function smsCreate(opts) {
+  const ms = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  if (ms) {
+    const { from, ...rest } = opts;
+    return smsCreate({ ...rest, messagingServiceSid: ms });
+  }
+  return smsCreate(opts);
+}
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -620,10 +634,10 @@ app.post('/api/voicemail', validateTwilio, async (req, res) => {
     const durStr = durMins > 0 ? `${durMins}m ${durSecs}s` : `${durSecs}s`;
     const sms = `ð± Voicemail from ${Caller} (${durStr})\nListen: ${RecordingUrl}.mp3`;
     try {
-      await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone });
+      await smsCreate({ body: sms, from: getSenderNumber(user), to: user.business_phone });
       if (user.plan === 'team' && Array.isArray(user.team_phones)) {
         for (const phone of user.team_phones) {
-          try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); } catch (e) { }
+          try { await smsCreate({ body: sms, from: getSenderNumber(user), to: phone }); } catch (e) { }
         }
       }
     } catch (e) { console.error('Voicemail SMS:', e.message); }
@@ -702,7 +716,7 @@ app.post('/api/dial-complete', twilioWebhookLimiter, validateTwilio, async (req,
     const defaultMsg = getTradeMessage(user.business_name, user.trade || 'general', isAH);
     const message = isAH ? (user.after_hours_message || defaultMsg) : (user.custom_message || defaultMsg);
     try {
-      await twilioClient.messages.create({ body: message, from: senderNumber, to: callerNum });
+      await smsCreate({ body: message, from: senderNumber, to: callerNum });
 
       // FIX [1d/4]: Store sent_from so replies to admin number can be routed correctly
       // FIX [6a]: ON CONFLICT uses the new partial unique index on (user_id, caller_phone) WHERE status='pending'
@@ -791,7 +805,7 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
         ? contractor.twilio_number
         : (lead.sent_from || ADMIN_TWILIO_NUMBER);
       try {
-        await twilioClient.messages.create({
+        await smsCreate({
           body: Body.slice(0, 1500),
           from: senderNum,
           to: lead.caller_phone
@@ -804,7 +818,7 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
       } catch (e) {
         console.error('Bridge relay error:', e.message);
         try {
-          await twilioClient.messages.create({
+          await smsCreate({
             body: `CallLocally: couldn't relay that message to ${lead.caller_phone}. Please text them directly.`,
             from: senderNum, to: From
           });
@@ -975,11 +989,11 @@ app.get('/api/admin/users', async (req, res) => {
 async function notifyContractor(user, lead) {
   const flag = lead.urgent ? 'ð¨ URGENT â ' : '';
   const sms = `${flag}New CallLocally lead:\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Not provided'}${lead.after_hours ? '\n⏰ After-hours' : ''}\n\nReply to this message to text them back — CallLocally will route it to the customer.`;
-  try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
+  try { await smsCreate({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
   catch (e) { console.error('Contractor SMS:', e.message); }
   if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
     for (const phone of user.team_phones) {
-      try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: phone }); }
+      try { await smsCreate({ body: sms, from: getSenderNumber(user), to: phone }); }
       catch (e) { console.error('Team SMS error:', e.message); }
     }
   }
@@ -1159,7 +1173,7 @@ async function sendVerifiedEmail(user) {
   if (user.business_phone && user.twilio_number) {
     // FIX [1g]: Use getCarrierInstructions for SMS too
     try {
-      await twilioClient.messages.create({
+      await smsCreate({
         body: `â Your CallLocally number is verified and ready! One last step: dial ${ci.dialCode} from your phone, press Call. That's it â missed calls will now be captured automatically. Questions? Reply to this text.`,
         from: getSenderNumber(user),
         to: user.business_phone
@@ -1315,7 +1329,7 @@ async function checkTrials() {
         await sendTrialEmail(user, daysLeft);
         if (daysLeft === 0 && user.twilio_number && user.business_phone) {
           try {
-            await twilioClient.messages.create({
+            await smsCreate({
               body: `â° Your CallLocally trial has ended. Don't lose your leads â upgrade at calllocally.com/dashboard. Solo plan is just $49/mo. Questions? Reply here.`,
               from: getSenderNumber(user),
               to: user.business_phone
