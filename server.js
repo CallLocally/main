@@ -217,27 +217,27 @@ function getTradeMessage(businessName, trade, afterHours = false) {
   const biz = businessName;
   const ah = afterHours;
   const base = {
-    plumbing:    ah ? `Hi! This is ${biz} â we're closed right now. What's the plumbing issue and your address? (e.g. leak, clog, no hot water) We'll call first thing in the morning.`
-                    : `Hi! This is ${biz} â we're on a job. What's the plumbing issue and address? (e.g. burst pipe, clog, no hot water)`,
-    hvac:        ah ? `Hi! This is ${biz} â we're closed. What's going on with your heating or AC, and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} â missed your call. What's the HVAC issue and address? (e.g. no heat, no AC, strange noise)`,
-    electrical:  ah ? `Hi! This is ${biz} â we're closed. What's the electrical issue and your address? We call back emergencies 24/7 â reply URGENT if needed.`
-                    : `Hi! This is ${biz} â on a job. What's the electrical issue and address? (e.g. outage, tripped breaker, new install)`,
-    roofing:     ah ? `Hi! This is ${biz} â closed for the day. What roofing issue do you have and what's the address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} â missed your call. Is this a repair, inspection, or replacement? And what's the property address?`,
-    landscaping: ah ? `Hi! This is ${biz} â closed for the day. What service do you need and what's your address? (lawn care, trees, sprinklers, design)`
-                    : `Hi! This is ${biz} â on a job. What landscaping service do you need and the address? (lawn, trees, sprinklers, cleanup)`,
-    pest:        ah ? `Hi! This is ${biz} â closed right now. What pest issue are you dealing with and what's your address? We'll call back in the morning.`
-                    : `Hi! This is ${biz} â missed your call. What pest issue are you having and what's the address? (e.g. ants, rodents, termites)`,
-    handyman:    ah ? `Hi! This is ${biz} â closed for today. What do you need done and what's the address? We'll schedule you first thing tomorrow.`
-                    : `Hi! This is ${biz} â on a job. What do you need fixed or built, and what's the address?`,
-    painting:    ah ? `Hi! This is ${biz} â closed for the day. What painting project do you have in mind and what's the address?`
-                    : `Hi! This is ${biz} â missed your call. Interior or exterior painting? And what's the address?`,
-    pool:        ah ? `Hi! This is ${biz} â closed right now. What's the pool issue and your address? We'll follow up in the morning.`
-                    : `Hi! This is ${biz} â on a job. What's the pool issue and address? (e.g. repair, cleaning, equipment, green water)`,
-    general:     ah ? `Hi! This is ${biz} â we're closed. What service do you need and what's your address? We'll call back first thing in the morning.`
-                    : `Hi! This is ${biz} â missed your call. What service do you need and what's your address?`,
-  };
+    plumbing:    ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what's the plumbing issue and your address? (leak, clog, no hot water) I'll text back first thing in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What's the plumbing issue and your address? (leak, clog, no hot water) I'll text back ASAP with timing & pricing.`,
+    hvac:        ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what's going on with your heating or AC, and what's your address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What's the HVAC issue and address? (no heat, no AC, strange noise) I'll text back ASAP with timing & pricing.`,
+    electrical:  ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what's the electrical issue and your address? Reply URGENT if it's an emergency.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What's the electrical issue and address? (outage, breaker, new install) I'll text back ASAP with timing & pricing.`,
+    roofing:     ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but is this a repair, inspection, or replacement? And what's the address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. Is this a repair, inspection, or replacement? And what's the property address? I'll text back ASAP with timing & pricing.`,
+    landscaping: ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what service do you need and what's your address? (lawn, trees, sprinklers) I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What landscaping service and the address? (lawn, trees, sprinklers, cleanup) I'll text back ASAP with timing & pricing.`,
+    pest:        ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what pest issue and your address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What pest issue and the address? (ants, rodents, termites) I'll text back ASAP with timing & pricing.`,
+    handyman:    ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what do you need done and what's the address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What do you need fixed or built, and what's the address? I'll text back ASAP with timing & pricing.`,
+    painting:    ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but interior or exterior painting? And what's the address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. Interior or exterior painting? And what's the address? I'll text back ASAP with timing & pricing.`,
+    pool:        ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what's the pool issue and your address? I'll text back in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What's the pool issue and the address? (repair, cleaning, equipment, green water) I'll text back ASAP with timing & pricing.`,
+    general:     ah ? `Hi! This is ${biz} — sorry I missed you. We're closed, but what service do you need and what's your address? I'll text back first thing in the morning.`
+                    : `Hi! This is ${biz} — sorry I missed your call. What's going on and what's your address? I'll text back with timing & pricing ASAP.`,
+    };
   return base[trade] || base.general;
 }
 
@@ -315,10 +315,10 @@ async function submitTollFreeVerification(user) {
     NotificationEmail: user.email,
     BusinessName: biz,
     BusinessWebsite: 'https://calllocally.com',
-    BusinessStreetAddress: '1234 Main St',
-    BusinessCity: 'Los Angeles',
+    BusinessStreetAddress: '505 35th St Apt A',
+    BusinessCity: 'Newport Beach',
     BusinessStateProvinceRegion: 'CA',
-    BusinessPostalCode: '90001',
+    BusinessPostalCode: '92663',
     BusinessCountry: 'US',
     BusinessType: 'SOLE_PROPRIETOR',
     BusinessContactFirstName: firstName,
@@ -326,8 +326,8 @@ async function submitTollFreeVerification(user) {
     BusinessContactEmail: user.email,
     BusinessContactPhone: user.businessPhone || user.business_phone || user.twilioNumber,
     UseCaseCategories: 'ACCOUNT_NOTIFICATIONS',
-    UseCaseSummary: `CallLocally sends automated SMS to missed callers on behalf of ${biz}, a home service contractor. When a customer calls and gets no answer, CallLocally texts them to capture their service need and address. The contractor receives lead details via SMS and email. No marketing messages.`,
-    ProductionMessageSample: `Hi! This is ${biz} â missed your call. What service do you need and what's your address?`,
+    UseCaseSummary: `CallLocally sends automated SMS to missed callers on behalf of ${biz}, a home service contractor. When a customer calls and gets no answer, CallLocally texts the caller to capture their service need and address, sends an acknowledgment when the caller replies, and relays the contractor's replies back through the same number so the entire conversation stays in one thread. Transactional lead-capture messages only. No marketing.`,
+    ProductionMessageSample: `Hi! This is ${biz} — sorry I missed your call. What's going on and what's your address? I'll text back with timing & pricing ASAP.`,
     OptInType: 'VERBAL',
     OptInImageUrls: 'https://calllocally.com',
     MessageVolume: '10',
@@ -371,6 +371,8 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail))
     return res.status(400).json({ error: 'Invalid email' });
 
+  // FIX [rollback]: Track purchased number at outer scope so we can release it on failure
+  let purchased = null;
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email=$1', [cleanEmail]);
     if (existing.rows.length) return res.status(400).json({ error: 'Email already registered' });
@@ -380,7 +382,7 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     // Provision toll-free number
     const tfAvail = await twilioClient.availablePhoneNumbers('US').tollFree.list({ limit: 1 });
     if (!tfAvail.length) throw new Error('No toll-free numbers available');
-    const purchased = await twilioClient.incomingPhoneNumbers.create({
+    purchased = await twilioClient.incomingPhoneNumbers.create({
       phoneNumber: tfAvail[0].phoneNumber,
       voiceUrl: `${RAILWAY_URL}/api/forward`, voiceMethod: 'POST',
       statusCallback: `${RAILWAY_URL}/api/call-status`, statusCallbackMethod: 'POST',
@@ -416,9 +418,24 @@ app.post('/api/signup', signupLimiter, async (req, res) => {
     res.json({ success: true, userId, authToken, twilioNumber: purchased.phoneNumber });
   } catch (err) {
     console.error('Signup error:', err.message);
+    // FIX [rollback]: Release orphaned toll-free number so we don't get billed for it
+    if (purchased && purchased.sid) {
+      try {
+        await twilioClient.incomingPhoneNumbers(purchased.sid).remove();
+        console.log(`Released orphaned number ${purchased.phoneNumber} after signup failure`);
+      } catch (releaseErr) {
+        console.error(`Failed to release ${purchased.phoneNumber}:`, releaseErr.message);
+      }
+    }
     // FIX [2e]: Don't leak internal error details
     res.status(500).json({ error: 'Signup failed. Please try again or contact support.' });
   }
+});
+
+
+// ── HEALTH CHECK (Railway liveness) ──
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: Math.floor(process.uptime()), timestamp: new Date().toISOString() });
 });
 
 
@@ -734,11 +751,71 @@ app.post('/api/call-status', validateTwilio, async (req, res) => {
 app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
   try {
     const { From, To, Body } = req.body;
+    const xmlEscape = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    let leadRes;
-
+    // ── CONTRACTOR REPLY BRIDGE ──
+    // If sender is a known contractor (business_phone or team_phones entry) texting
+    // their own CallLocally number (or the admin fallback while TFV is pending),
+    // relay to their most recent captured lead so the customer sees one thread.
+    let bridgeQuery, bridgeParams;
     if (To === ADMIN_TWILIO_NUMBER) {
-      // FIX [1d]: Reply came to the admin number (TFV pending). Look up by sent_from column.
+      bridgeQuery = `SELECT id, business_name, twilio_number, business_phone
+        FROM users
+        WHERE (business_phone=$1 OR $1 = ANY(COALESCE(team_phones, ARRAY[]::text[])))
+          AND (tfv_notified IS NOT TRUE OR tfv_notified IS NULL)
+        ORDER BY created_at DESC LIMIT 1`;
+      bridgeParams = [From];
+    } else {
+      bridgeQuery = `SELECT id, business_name, twilio_number, business_phone
+        FROM users
+        WHERE twilio_number=$1
+          AND (business_phone=$2 OR $2 = ANY(COALESCE(team_phones, ARRAY[]::text[])))
+        LIMIT 1`;
+      bridgeParams = [To, From];
+    }
+    const bridgeRes = await pool.query(bridgeQuery, bridgeParams);
+    if (bridgeRes.rows.length > 0) {
+      const contractor = bridgeRes.rows[0];
+      const leadLookup = await pool.query(
+        `SELECT id, caller_phone, sent_from FROM leads
+         WHERE user_id=$1 AND status='captured' AND captured_at > NOW() - INTERVAL '48 hours'
+         ORDER BY captured_at DESC LIMIT 1`,
+        [contractor.id]
+      );
+      res.set('Content-Type', 'text/xml');
+      if (leadLookup.rows.length === 0) {
+        return res.send(`<?xml version="1.0"?><Response><Message>CallLocally: no recent customer reply to relay. New leads will appear here when customers text in.</Message></Response>`);
+      }
+      const lead = leadLookup.rows[0];
+      const senderNum = (contractor.twilio_number && lead.sent_from !== ADMIN_TWILIO_NUMBER)
+        ? contractor.twilio_number
+        : (lead.sent_from || ADMIN_TWILIO_NUMBER);
+      try {
+        await twilioClient.messages.create({
+          body: Body.slice(0, 1500),
+          from: senderNum,
+          to: lead.caller_phone
+        });
+        await pool.query(
+          `UPDATE leads SET conversation = COALESCE(conversation, '[]'::jsonb) || $1::jsonb WHERE id=$2`,
+          [JSON.stringify([{ from: 'contractor', body: Body.slice(0, 1500), at: new Date().toISOString() }]), lead.id]
+        );
+        console.log(`Bridge relay: ${contractor.business_name} -> ${lead.caller_phone}`);
+      } catch (e) {
+        console.error('Bridge relay error:', e.message);
+        try {
+          await twilioClient.messages.create({
+            body: `CallLocally: couldn't relay that message to ${lead.caller_phone}. Please text them directly.`,
+            from: senderNum, to: From
+          });
+        } catch (e2) { console.error('Bridge error-notify failed:', e2.message); }
+      }
+      return res.send(`<?xml version="1.0"?><Response></Response>`);
+    }
+
+    // ── CUSTOMER REPLY (existing flow) ──
+    let leadRes;
+    if (To === ADMIN_TWILIO_NUMBER) {
       leadRes = await pool.query(`
         SELECT l.*, u.id as uid, u.business_name, u.business_phone, u.twilio_number as user_twilio,
                u.email, u.plan, u.team_phones, u.trade, u.paid, u.paid_through, u.trial_ends_at,
@@ -750,7 +827,6 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
         ORDER BY l.created_at DESC LIMIT 1
       `, [From, ADMIN_TWILIO_NUMBER]);
     } else {
-      // Normal path: reply came to the contractor's verified number
       leadRes = await pool.query(`
         SELECT l.*, u.id as uid, u.business_name, u.business_phone, u.twilio_number as user_twilio,
                u.email, u.plan, u.team_phones, u.trade, u.paid, u.paid_through, u.trial_ends_at,
@@ -764,15 +840,14 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
     }
 
     const row = leadRes.rows[0];
-    let reply = "Thanks! We got your message and will call you back shortly.";
+    let reply = "Thanks — we got your message. We'll text back shortly.";
 
     if (row && isActive(row)) {
-      const urgent = /urgent|emergency|asap|right now|leaking|flooding|no heat|no ac|burst|broken|fire|smoke|gas/i.test(Body);
-      const addrMatch = Body.match(/\d+\s+[\w\s]+(st|ave|rd|blvd|dr|ln|way|ct|pl|street|avenue|road|drive|lane)/i);
+      const urgent = /urgent|emergency|asap|right now|leaking|flooding|no heat|no ac|burst|broken|fire|sparks|smoke|water everywhere/i.test(Body);
+      const addrMatch = Body.match(/\d+\s+[\w\s]+(st|ave|rd|blvd|dr|ln|way|ct|pl|street|avenue|road|drive|lane|court|place|boulevard|parkway|pkwy|circle|cir|trail|trl)\b/i);
 
       // FIX [6d]: Cap conversation array size to prevent unbounded growth
-      const existingConvo = Array.isArray(row.conversation) ? row.conversation.slice(-19) : [];
-      const conversation = [...existingConvo, { from: 'customer', text: Body.slice(0, 500), time: new Date().toISOString() }];
+      const conversation = [...(row.conversation || []), { from: 'caller', body: Body.slice(0, 500), at: new Date().toISOString() }].slice(-20);
 
       await pool.query(`
         UPDATE leads SET status='captured', captured_at=NOW(), urgent=$1,
@@ -780,7 +855,12 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
         WHERE id=$5
       `, [urgent || row.urgent, Body.slice(0, 500), addrMatch ? addrMatch[0] : row.address, JSON.stringify(conversation), row.id]);
 
-      await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [row.user_id]);
+      // FIX: Increment total_urgent alongside total_leads when applicable
+      if (urgent || row.urgent) {
+        await pool.query('UPDATE users SET total_leads = total_leads + 1, total_urgent = COALESCE(total_urgent, 0) + 1 WHERE id=$1', [row.user_id]);
+      } else {
+        await pool.query('UPDATE users SET total_leads = total_leads + 1 WHERE id=$1', [row.user_id]);
+      }
 
       // Build a user-like object for notifyContractor
       const userForNotify = {
@@ -799,15 +879,18 @@ app.post('/api/twilio/sms', validateTwilio, async (req, res) => {
         address: addrMatch ? addrMatch[0] : row.address,
       };
       await notifyContractor(userForNotify, leadForNotify);
-      reply = urgent ? `Got it â urgent. ${row.business_name} is being notified now.` : `Thanks! ${row.business_name} will call you back soon.`;
+
+      reply = (urgent || row.urgent)
+        ? `Got it — URGENT. ${row.business_name} is being notified right now and will text back shortly.`
+        : `Thanks! ${row.business_name} got your message and will text back shortly with timing and pricing.`;
     }
 
     res.set('Content-Type', 'text/xml');
-    res.send(`<?xml version="1.0"?><Response><Message>${reply}</Message></Response>`);
+    res.send(`<?xml version="1.0"?><Response><Message>${xmlEscape(reply)}</Message></Response>`);
   } catch (err) {
     console.error('SMS handler error:', err.message);
     res.set('Content-Type', 'text/xml');
-    res.send(`<?xml version="1.0"?><Response><Message>Thanks! We received your message.</Message></Response>`);
+    res.send(`<?xml version="1.0"?><Response><Message>Thanks — we got your message.</Message></Response>`);
   }
 });
 
@@ -891,7 +974,7 @@ app.get('/api/admin/users', async (req, res) => {
 
 async function notifyContractor(user, lead) {
   const flag = lead.urgent ? 'ð¨ URGENT â ' : '';
-  const sms = `${flag}New lead!\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Ask when you call'}${lead.after_hours ? ' \nâ° After hours' : ''}`;
+  const sms = `${flag}New CallLocally lead:\nFrom: ${lead.caller_phone}\nService: ${lead.service || 'See reply'}\nAddress: ${lead.address || 'Not provided'}${lead.after_hours ? '\n⏰ After-hours' : ''}\n\nReply to this message to text them back — CallLocally will route it to the customer.`;
   try { await twilioClient.messages.create({ body: sms, from: getSenderNumber(user), to: user.business_phone }); }
   catch (e) { console.error('Contractor SMS:', e.message); }
   if (user.plan === 'team' && Array.isArray(user.team_phones) && user.team_phones.length > 0) {
@@ -950,10 +1033,10 @@ async function sendWelcomeEmail(user) {
         <div style="background:#f9f9f9;border-radius:8px;padding:14px;margin-bottom:20px">
           <p style="font-size:13px;color:#555;margin:0">
             <b>How it works after setup:</b><br>
-            1. Customer calls your real number â rings you for 18 seconds<br>
-            2. If no answer â they hear a voicemail greeting<br>
-            3. They can leave a voicemail <b>or</b> reply via text<br>
-            4. You get the voicemail recording + text transcript sent to your phone immediately<br><br>
+            1. Customer calls your regular number → rings you for 18 seconds<br>
+            2. If no answer → they get a text from your CallLocally number asking what they need<br>
+            3. When they reply, we text YOU their name, service, and address<br>
+            4. Just hit reply on that text and we'll send it through to the customer — they see your whole conversation as one thread<br><br>
             <b>To turn off forwarding later:</b> Dial <code>##61#</code> and press Call.
           </p>
         </div>
