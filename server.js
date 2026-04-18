@@ -67,9 +67,9 @@ function smsCreate(opts) {
   const ms = process.env.TWILIO_MESSAGING_SERVICE_SID;
   if (ms) {
     const { from, ...rest } = opts;
-    return smsCreate({ ...rest, messagingServiceSid: ms });
+    return twilioClient.messages.create({ ...rest, messagingServiceSid: ms });
   }
-  return smsCreate(opts);
+  return twilioClient.messages.create(opts);
 }
 if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 let stripe = null;
