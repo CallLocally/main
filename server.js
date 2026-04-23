@@ -318,6 +318,12 @@ async function requireAuth(req, res, next) {
 
 // FIX [1a]: Single definition â removed duplicate
 async function submitTollFreeVerification(user) {
+  // DISABLED 2026-04-22: Auto-TFV-per-signup caused 30468 ("Third-Party Lead Generation")
+  // rejections. Pivoting to A2P 10DLC Customer Care. Per-signup auto-verification will be
+  // rebuilt under Twilio ISV/Secondary Customer Profile architecture in a later milestone.
+  console.log('[TFV DISABLED] submitTollFreeVerification skipped for', user && user.email);
+  return false;
+
   const TSID = process.env.TWILIO_ACCOUNT_SID;
   const TTOKEN = process.env.TWILIO_AUTH_TOKEN;
   const nameParts = (user.name || 'Owner').trim().split(' ');
