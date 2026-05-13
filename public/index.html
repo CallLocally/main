@@ -1,1162 +1,909 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CallLocally  Never Miss Another Lead</title>
-<meta name="description" content="Automated SMS callback for home service contractors. Set up in 5 minutes. Fully verified and live within 1 week. No new phone or app needed.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --orange:#FF5C1A;--orange-dark:#D94B12;--orange-pale:#fff3ee;
-  --dark:#0C0F13;--dark-2:#13171D;--dark-3:#1A1F27;
-  --white:#fff;--text:#E2DFD8;--muted:#7A8090;
-  --border:rgba(255,255,255,0.08);
-  --font-d:'Barlow Condensed',sans-serif;
-  --font-b:'DM Sans',sans-serif;
-}
-html{scroll-behavior:smooth}
-body{font-family:var(--font-b);background:#fff;color:#1a1a1a;-webkit-font-smoothing:antialiased}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CallLocally · Never miss another lead</title>
+  <meta name="description" content="Missed-call lead capture for home service contractors. Customers call your existing number — when you can't pick up, CallLocally texts them back in 60 seconds, captures the lead, and delivers it to your phone." />
+  <style>
+    :root {
+      --bg: #0d0c0a;
+      --bg-soft: #131210;
+      --ink: #ece8df;
+      --ink-soft: #b8b2a3;
+      --ink-muted: #6e6a5e;
+      --rule: #2a2722;
+      --rule-strong: #3d3934;
+      --accent: #f4642c;
+      --accent-deep: #c5471a;
+      --accent-soft: rgba(244, 100, 44, 0.10);
+      --urgent: #f4642c;
+      --captured: #7eb37a;
+      --max: 1120px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 17px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { color: var(--accent-deep); }
+    img, svg { display: block; max-width: 100%; }
+    h1, h2, h3 { color: var(--ink); margin: 0; }
+    p { margin: 0; color: var(--ink-soft); }
+    button { font: inherit; cursor: pointer; }
 
-/* NAV */
-nav{position:sticky;top:0;z-index:100;background:rgba(12,15,19,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 5%}
-.nav-inner{max-width:1100px;margin:0 auto;height:62px;display:flex;align-items:center;justify-content:space-between}
-.nav-logo{display:flex;align-items:center;gap:9px;text-decoration:none}
-.nav-logo-text{font-family:var(--font-d);font-size:22px;font-weight:800;color:var(--white);letter-spacing:-0.3px}
-.nav-links{display:flex;align-items:center;gap:28px}
-.nav-links a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;transition:color 0.15s}
-.nav-links a:hover{color:var(--white)}
-.nav-cta{background:var(--orange);color:white!important;padding:8px 18px;border-radius:8px;font-weight:600!important;transition:background 0.15s!important}
-.nav-cta:hover{background:var(--orange-dark)!important}
-@media(max-width:600px){.nav-links{display:none}}
+    .wrap {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 32px;
+    }
 
-/* HERO */
-.hero{background:var(--dark);padding:90px 5% 80px;text-align:center;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:700px;height:700px;background:radial-gradient(circle,rgba(255,92,26,0.12) 0%,transparent 70%);pointer-events:none}
-.hero-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(255,92,26,0.12);border:1px solid rgba(255,92,26,0.25);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;color:var(--orange);margin-bottom:24px}
-.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-.hero h1{font-family:var(--font-d);font-size:clamp(52px,8vw,88px);font-weight:900;line-height:0.95;letter-spacing:-1px;color:var(--white);margin-bottom:22px}
-.hero h1 em{font-style:normal;color:var(--orange)}
-.hero-sub{font-size:clamp(17px,2.5vw,20px);color:var(--muted);max-width:580px;margin:0 auto 32px;line-height:1.6}
-.hero-pill{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:30px;padding:8px 18px;margin-bottom:32px}
-.hero-pill-check{width:20px;height:20px;border-radius:50%;background:var(--orange);color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.hero-pill span{font-size:14px;font-weight:500;color:var(--text)}
-.hero-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 28px;border-radius:10px;font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;border:none;font-family:var(--font-b);transition:all 0.15s}
-.btn-orange{background:var(--orange);color:white}
-.btn-orange:hover{background:var(--orange-dark);transform:translateY(-1px)}
-.btn-outline{background:transparent;color:var(--text);border:1.5px solid rgba(255,255,255,0.2)}
-.btn-outline:hover{border-color:rgba(255,255,255,0.4);color:var(--white)}
-.btn-lg{padding:16px 32px;font-size:17px}
-.hero-note{font-size:13px;color:var(--muted)}
+    /* Header */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(13, 12, 10, 0.85);
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      border-bottom: 1px solid var(--rule);
+    }
+    .header__inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+    }
+    .brand {
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .header__nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .header__nav a {
+      font-size: 14px;
+      color: var(--ink-soft);
+    }
+    .header__nav a:hover { color: var(--ink); }
+    .header__nav .nav-cta {
+      color: var(--ink);
+      background: var(--accent);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .header__nav .nav-cta:hover { background: var(--accent-deep); color: var(--ink); }
 
-/* TRUST BAR */
-.trust{background:var(--dark-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 5%;display:flex;align-items:center;justify-content:center;gap:32px;flex-wrap:wrap}
-.trust-item{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.trust-item b{color:var(--text)}
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 26px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      border: 1px solid transparent;
+    }
+    .btn--primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn--primary:hover { background: var(--accent-deep); color: #fff; }
+    .btn--ghost {
+      background: transparent;
+      border-color: var(--rule-strong);
+      color: var(--ink);
+    }
+    .btn--ghost:hover { border-color: var(--ink-muted); color: var(--ink); }
+    .btn--large { padding: 16px 30px; font-size: 16px; }
 
-/* SECTIONS */
-.sec-dark{background:var(--dark);padding:80px 5%;color:var(--text)}
-.sec-light{background:#f8f7f5;padding:80px 5%}
-.sec-white{background:#fff;padding:80px 5%}
-.sec-inner{max-width:1100px;margin:0 auto}
-.sec-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--orange);margin-bottom:12px}
-.sec-label.on-light{color:var(--orange)}
-.sec-h{font-family:var(--font-d);font-size:clamp(36px,5vw,52px);font-weight:800;line-height:1.05;margin-bottom:14px}
-.sec-sub{font-size:17px;color:#666;line-height:1.6;max-width:540px}
-.on-dark .sec-h{color:var(--white)}
-.on-dark .sec-sub{color:var(--muted)}
+    /* HERO */
+    .hero {
+      padding: 96px 0 80px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(44px, 6.5vw, 84px);
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+      margin: 0 auto 28px;
+      max-width: 18ch;
+    }
+    .hero h1 .accent { color: var(--accent); }
+    .hero__sub {
+      font-size: 20px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+      max-width: 56ch;
+      margin: 0 auto 28px;
+    }
+    .hero__caption {
+      font-size: 14px;
+      color: var(--ink-muted);
+      margin: 0 auto 36px;
+      letter-spacing: 0.01em;
+    }
+    .hero__caption .dot {
+      display: inline-block;
+      margin: 0 10px;
+      opacity: 0.5;
+    }
+    .hero__ctas {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .hero__fineprint {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin: 0;
+    }
 
-/* HOW IT WORKS */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:52px}
-@media(max-width:768px){.steps{grid-template-columns:1fr}}
-.step{background:var(--dark-2);border:1px solid var(--border);border-radius:16px;padding:28px}
-.step-num{font-family:var(--font-d);font-size:48px;font-weight:900;color:var(--orange);line-height:1;margin-bottom:14px}
-.step h3{font-size:18px;font-weight:600;color:var(--white);margin-bottom:8px}
-.step p{font-size:14px;color:var(--muted);line-height:1.6}
+    /* Trust bar */
+    .trustbar {
+      list-style: none;
+      margin: 0;
+      padding: 24px 32px;
+      max-width: var(--max);
+      margin: 0 auto;
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      font-size: 14px;
+      color: var(--ink-soft);
+    }
+    .trustbar li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .trustbar li::before {
+      content: "";
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+    }
+    .trustbar strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
 
-/* SETUP */
-.setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
-@media(max-width:768px){.setup-grid{grid-template-columns:1fr;gap:40px}}
-.setup-steps{display:flex;flex-direction:column}
-.setup-row{display:flex;gap:18px;padding:22px 0;border-bottom:1px solid var(--border)}
-.setup-row:last-child{border-bottom:none}
-.setup-num{width:30px;height:30px;border-radius:50%;background:var(--orange);color:white;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
-.setup-content h4{font-size:16px;font-weight:600;color:var(--white);margin-bottom:4px}
-.setup-content p{font-size:14px;color:var(--muted);line-height:1.6}
-.setup-tag{display:inline-block;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--muted);margin-top:6px}
-.setup-preview{background:var(--dark-2);border:1px solid var(--border);border-radius:16px;padding:24px;position:sticky;top:80px}
-.lead-card{background:var(--dark-3);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
-.lead-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.lead-caller{font-size:15px;font-weight:600;color:var(--white)}
-.lead-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,92,26,0.15);color:var(--orange)}
-.lead-detail{font-size:13px;color:var(--muted);margin-bottom:4px}
-.lead-detail b{color:var(--text)}
-.sms-bubble{background:rgba(255,255,255,0.06);border-radius:10px 10px 10px 2px;padding:10px 14px;font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5}
+    /* Section base */
+    section.block {
+      padding: 112px 0;
+      border-top: 1px solid var(--rule);
+    }
+    section.block:first-of-type { border-top: none; }
+    .block__head {
+      max-width: 760px;
+      margin-bottom: 64px;
+    }
+    .block__head--center {
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+    h2 {
+      font-size: clamp(32px, 4.5vw, 52px);
+      line-height: 1.04;
+      letter-spacing: -0.025em;
+      font-weight: 600;
+      margin: 0 0 18px;
+    }
+    h2 .accent { color: var(--accent); }
+    .block__sub {
+      font-size: 19px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+      max-width: 56ch;
+    }
+    .block__head--center .block__sub { margin-left: auto; margin-right: auto; }
 
-/* FEATURES */
-.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
-@media(max-width:900px){.features-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:580px){.features-grid{grid-template-columns:1fr}}
-.feature{background:#fff;border:1.5px solid #eee;border-radius:14px;padding:24px}
-.feature-icon{font-size:28px;margin-bottom:14px}
-.feature h3{font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:6px}
-.feature p{font-size:14px;color:#666;line-height:1.6}
+    /* How It Works */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+    }
+    .step {
+      padding: 32px 4px 8px;
+      border-top: 1px solid var(--rule-strong);
+    }
+    .step__num {
+      display: block;
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 16px;
+    }
+    .step h3 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0 0 12px;
+      line-height: 1.25;
+    }
+    .step p {
+      font-size: 16px;
+      line-height: 1.55;
+      max-width: 32ch;
+    }
 
-/* PRICING */
-.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px;max-width:900px;margin-left:auto;margin-right:auto}
-@media(max-width:700px){.pricing-grid{grid-template-columns:1fr}}
-.plan{background:#fff;border:2px solid #e8e8e8;border-radius:16px;padding:28px;position:relative}
-.plan.featured{border-color:var(--orange);box-shadow:0 0 0 4px rgba(255,92,26,0.08)}
-.plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--orange);color:white;font-size:12px;font-weight:700;padding:3px 14px;border-radius:10px;white-space:nowrap}
-.plan-name{font-size:15px;font-weight:700;color:#666;margin-bottom:8px}
-.plan-price{font-family:var(--font-d);font-size:52px;font-weight:900;color:#1a1a1a;line-height:1}
-.plan-price span{font-size:18px;font-weight:500;color:#999}
-.plan-desc{font-size:14px;color:#888;margin:10px 0 20px}
-.plan-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
-.plan-features li{font-size:14px;color:#555;display:flex;align-items:center;gap:8px}
-.plan-features li::before{content:'';color:var(--orange);font-weight:700;flex-shrink:0}
-.plan-btn{width:100%;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:none;font-family:var(--font-b);transition:all 0.15s}
-.plan-btn-orange{background:var(--orange);color:white}
-.plan-btn-orange:hover{background:var(--orange-dark)}
-.plan-btn-outline{background:transparent;color:#1a1a1a;border:2px solid #ddd}
-.plan-btn-outline:hover{border-color:var(--orange);color:var(--orange)}
-.pricing-note{text-align:center;margin-top:20px;font-size:14px;color:#888}
+    /* Setup */
+    .setup {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+    .setup__intro p {
+      font-size: 19px;
+      line-height: 1.5;
+      margin-bottom: 36px;
+      max-width: 50ch;
+    }
+    .setup__list {
+      list-style: none;
+      counter-reset: setup-counter;
+      padding: 0;
+      margin: 0;
+    }
+    .setup__list li {
+      counter-increment: setup-counter;
+      padding: 24px 0 24px 56px;
+      position: relative;
+      border-top: 1px solid var(--rule);
+    }
+    .setup__list li:first-child { border-top: none; padding-top: 0; }
+    .setup__list li:first-child::before { top: 0; }
+    .setup__list li::before {
+      content: counter(setup-counter);
+      position: absolute;
+      left: 0;
+      top: 24px;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .setup__list h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .setup__list p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0 0 8px;
+    }
+    .setup__list .timing {
+      font-size: 13px;
+      color: var(--ink-muted);
+      font-variant-numeric: tabular-nums;
+    }
 
-/* FAQ */
-.faq{max-width:680px;margin:0 auto;margin-top:48px}
-.faq-item{border-bottom:1px solid #eee;padding:20px 0;cursor:pointer}
-.faq-q{font-size:16px;font-weight:600;color:#1a1a1a;display:flex;justify-content:space-between;align-items:center;gap:16px}
-.faq-q::after{content:'+';font-size:22px;color:var(--orange);flex-shrink:0;transition:transform 0.2s}
-.faq-item.open .faq-q::after{transform:rotate(45deg)}
-.faq-a{font-size:15px;color:#666;line-height:1.7;max-height:0;overflow:hidden;transition:max-height 0.3s ease,margin 0.3s}
-.faq-item.open .faq-a{max-height:300px;margin-top:12px}
+    /* Live lead example */
+    .preview {
+      background: var(--bg-soft);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: 28px;
+    }
+    .preview__title {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin: 0 0 20px;
+    }
+    .lead-card {
+      padding: 18px 0;
+      border-top: 1px solid var(--rule);
+    }
+    .lead-card:first-of-type { border-top: none; padding-top: 0; }
+    .lead-card__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .lead-card__phone {
+      font-weight: 600;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      font-size: 16px;
+    }
+    .lead-card__tag {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .lead-card__tag--urgent { color: var(--urgent); }
+    .lead-card__tag--captured { color: var(--captured); }
+    .lead-card__line {
+      font-size: 14px;
+      margin: 4px 0;
+      color: var(--ink-soft);
+    }
+    .lead-card__line strong { color: var(--ink); font-weight: 600; }
+    .lead-card__quote {
+      font-size: 14px;
+      color: var(--ink);
+      font-style: italic;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+    }
+    .preview__foot {
+      font-size: 13px;
+      color: var(--ink-muted);
+      text-align: center;
+      margin: 16px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+    }
 
-/* CTA BAND */
-.cta-band{background:var(--orange);padding:64px 5%;text-align:center}
-.cta-band h2{font-family:var(--font-d);font-size:clamp(36px,5vw,52px);font-weight:900;color:white;margin-bottom:10px}
-.cta-band p{font-size:18px;color:rgba(255,255,255,0.85);margin-bottom:28px}
-.btn-white{background:white;color:var(--orange)}
-.btn-white:hover{background:#fff3ee}
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .feature {
+      background: var(--bg);
+      padding: 36px 28px;
+    }
+    .feature__icon {
+      width: 28px;
+      height: 28px;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+    .feature h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 10px;
+      letter-spacing: -0.005em;
+    }
+    .feature p {
+      font-size: 15px;
+      line-height: 1.55;
+    }
 
-/* FOOTER */
-footer{background:var(--dark);border-top:1px solid var(--border);padding:40px 5%;text-align:center}
-footer p{font-size:13px;color:var(--muted)}
-footer a{color:var(--muted);text-decoration:none}
-footer a:hover{color:var(--white)}
+    /* Pricing */
+    .pricing-card {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 44px 40px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 16px;
+      background: var(--bg-soft);
+    }
+    .pricing-card__price {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .pricing-card__amount {
+      font-size: 64px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: var(--ink);
+    }
+    .pricing-card__per {
+      font-size: 17px;
+      color: var(--ink-muted);
+    }
+    .pricing-card__tag {
+      font-size: 14px;
+      color: var(--ink-soft);
+      margin-bottom: 28px;
+    }
+    .pricing-card ul {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 32px;
+    }
+    .pricing-card ul li {
+      padding: 9px 0 9px 24px;
+      position: relative;
+      font-size: 15px;
+      color: var(--ink-soft);
+    }
+    .pricing-card ul li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 16px;
+      width: 12px;
+      height: 6px;
+      border-left: 2px solid var(--accent);
+      border-bottom: 2px solid var(--accent);
+      transform: rotate(-45deg);
+    }
+    .pricing-card .btn { width: 100%; }
+    .pricing-card__fine {
+      text-align: center;
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin: 16px 0 0;
+    }
 
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
-.modal-overlay.open{display:flex}
-.modal{background:var(--dark-2);border:1px solid var(--border);border-radius:20px;padding:36px;width:100%;max-width:440px;position:relative;max-height:90vh;overflow-y:auto}
-.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px}
-.modal-close:hover{color:var(--white)}
-.modal-logo{display:flex;align-items:center;gap:8px;margin-bottom:20px}
-.modal-logo-text{font-family:var(--font-d);font-size:20px;font-weight:800;color:var(--white)}
-.modal h2{font-size:22px;font-weight:700;color:var(--white);margin-bottom:4px}
-.modal-sub{font-size:14px;color:var(--muted);margin-bottom:24px}
-.form-group{margin-bottom:16px}
-.form-label{display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
-.form-input,.form-select{width:100%;background:var(--dark-3);border:1.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:11px 14px;font-size:15px;color:var(--white);font-family:var(--font-b);outline:none;transition:border-color 0.15s}
-.form-input::placeholder{color:var(--muted)}
-.form-input:focus,.form-select:focus{border-color:rgba(255,92,26,0.5)}
-.form-select option{background:var(--dark-3)}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.submit-btn{width:100%;padding:14px;background:var(--orange);color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;font-family:var(--font-b);margin-top:8px;transition:background 0.15s}
-.submit-btn:hover{background:var(--orange-dark)}
-.submit-btn:disabled{opacity:0.6;cursor:not-allowed}
-.form-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:14px;display:none}
-.form-error.show{display:block}
-.success-screen{display:none;text-align:center;padding:16px 0}
-.success-screen.show{display:block}
-.success-num{font-size:36px;font-weight:800;color:var(--orange);font-family:var(--font-d);letter-spacing:2px;margin:16px 0 8px}
-.success-note{font-size:14px;color:var(--muted);line-height:1.7}
-.copy-btn{background:var(--dark-3);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b);margin-top:10px;transition:all 0.15s}
-.copy-btn:hover{color:var(--white);border-color:rgba(255,255,255,0.2)}
-</style>
+    /* FAQ */
+    .faq {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .faq details {
+      border-top: 1px solid var(--rule);
+      padding: 22px 0;
+    }
+    .faq details:last-of-type { border-bottom: 1px solid var(--rule); }
+    .faq summary {
+      cursor: pointer;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--ink);
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after {
+      content: "+";
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--accent);
+      transition: transform 160ms ease;
+      flex: 0 0 auto;
+    }
+    .faq details[open] summary::after { content: "−"; }
+    .faq details p {
+      margin: 14px 0 0;
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 66ch;
+    }
+
+    /* Final CTA */
+    .final {
+      padding: 96px 0 112px;
+      text-align: center;
+      border-top: 1px solid var(--rule);
+    }
+    .final h2 {
+      font-size: clamp(36px, 5vw, 60px);
+      margin: 0 auto 18px;
+      max-width: 18ch;
+    }
+    .final p {
+      max-width: 48ch;
+      margin: 0 auto 32px;
+      font-size: 18px;
+    }
+
+    /* Footer */
+    footer.site {
+      background: var(--bg);
+      border-top: 1px solid var(--rule);
+    }
+    footer.site .wrap {
+      padding-top: 40px;
+      padding-bottom: 48px;
+    }
+    .footer__row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      font-size: 14px;
+      color: var(--ink-muted);
+    }
+    .footer__links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .footer__links a {
+      color: var(--ink-soft);
+    }
+    .footer__links a:hover { color: var(--ink); }
+    .footer__legal {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .steps { grid-template-columns: 1fr; gap: 0; }
+      .step { border-top: 1px solid var(--rule-strong); padding-top: 28px; padding-bottom: 28px; }
+      .setup { grid-template-columns: 1fr; gap: 48px; }
+      .features { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      .wrap { padding: 0 22px; }
+      .header__inner { padding: 16px 22px; }
+      .header__nav { gap: 16px; }
+      .header__nav .nav-link { display: none; }
+      .hero { padding: 64px 0 56px; }
+      .hero h1 { font-size: 44px; }
+      .hero__sub { font-size: 17px; }
+      .hero__ctas .btn { width: 100%; }
+      section.block { padding: 80px 0; }
+      .block__head { margin-bottom: 44px; }
+      .trustbar { gap: 16px 24px; font-size: 13px; padding: 18px 22px; }
+      .pricing-card { padding: 32px 24px; }
+      .pricing-card__amount { font-size: 52px; }
+      .final { padding: 72px 0 88px; }
+      footer.site .footer__row { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
 </head>
 <body>
 
-<!-- NAV -->
-<nav>
-  <div class="nav-inner">
-    <a href="/" class="nav-logo">
-      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/><path d="M26 15H27C28.1 15 29 15.9 29 17V22C29 23.1 28.1 24 27 24H25.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span class="nav-logo-text">CallLocally</span>
-    </a>
-    <div class="nav-links">
-      <a href="#how">How it works</a>
-      <a href="#setup">Setup</a>
-      <a href="#pricing">Pricing</a>
-      <a href="/dashboard">Login</a>
-      <a href="#" class="nav-cta" onclick="openModal();return false">Start Free Trial</a>
+  <header class="header">
+    <div class="header__inner">
+      <a class="brand" href="/">CallLocally</a>
+      <nav class="header__nav">
+        <a class="nav-link" href="#how-it-works">How it works</a>
+        <a class="nav-link" href="#setup">Setup</a>
+        <a class="nav-link" href="#pricing">Pricing</a>
+        <a class="nav-link" href="/login">Log in</a>
+        <a class="nav-cta" href="/signup">Start free trial</a>
+      </nav>
     </div>
-  </div>
-</nav>
+  </header>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-badge"><span class="badge-dot"></span>Built for solo home service contractors</div>
-  <h1>You're on a job.<br>A lead just called.<br><em>You lost $400.</em></h1>
-  <p class="hero-sub">CallLocally texts them back in 60 seconds, captures the lead, and delivers it straight to your phone  while you keep working.</p>
-  <div class="hero-pill">
-    <div class="hero-pill-check"></div>
-    <span>Your existing number &nbsp;&middot;&nbsp; Verified in 1–3 days &nbsp;&middot;&nbsp; Then live in 5 min</span>
-  </div>
-  <div class="hero-actions">
-    <button class="btn btn-orange btn-lg" onclick="openModal()">Start 14-Day Free Trial</button>
-    <a href="#how" class="btn btn-outline btn-lg">See how it works</a>
-  </div>
-  <p class="hero-note">No credit card required &nbsp;&middot;&nbsp; No setup fee &nbsp;&middot;&nbsp; Cancel anytime</p>
-</section>
+  <main>
 
-<!-- TRUST BAR -->
-<div class="trust">
-  <div class="trust-item">&#10003; Texts back in <b>under 60 seconds</b></div>
-  <div class="trust-item">&#128241; <b>No new hardware</b> or software</div>
-  <div class="trust-item">&#9201; Set up in <b>5 min</b> &middot; live in <b>~1 week</b></div>
-  <div class="trust-item">&#10003; <b>TCPA compliant</b> out of the box</div>
-</div>
-
-<!-- HOW IT WORKS -->
-<section class="sec-dark on-dark" id="how">
-  <div class="sec-inner">
-    <div class="sec-label">How it works</div>
-    <h2 class="sec-h">Miss the call.<br>We catch the lead.</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">01</div>
-        <h3>Customer calls your number</h3>
-        <p>They call the same number they always have. You don't pick up  you're on a job, on a ladder, or covered in grease.</p>
+    <!-- HERO -->
+    <section class="hero wrap">
+      <h1>
+        You're on a job.<br />
+        A lead just called.<br />
+        <span class="accent">You lost $400.</span>
+      </h1>
+      <p class="hero__sub">
+        CallLocally texts them back in 60 seconds, captures the lead, and delivers
+        it straight to your phone while you keep working.
+      </p>
+      <p class="hero__caption">
+        Your existing number
+        <span class="dot">·</span>
+        Verified in 1–3 days
+        <span class="dot">·</span>
+        Live in 5 minutes
+      </p>
+      <div class="hero__ctas">
+        <a class="btn btn--primary btn--large" href="/signup">Start 14-day free trial</a>
+        <a class="btn btn--ghost btn--large" href="#how-it-works">See how it works</a>
       </div>
-      <div class="step">
-        <div class="step-num">02</div>
-        <h3>CallLocally texts them instantly</h3>
-        <p>Within 60 seconds, they get a text from your CallLocally number asking what they need and where they're located.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">03</div>
-        <h3>Lead delivered to your phone</h3>
-        <p>You get the caller's name, service need, address, and urgency via SMS and email. Just hit reply on the text — your response goes straight back to the customer in the same thread. No second number, no new apps.</p>
-      </div>
-    </div>
-  </div>
-</section>
+      <p class="hero__fineprint">14 days free · Cancel anytime · No setup fee</p>
+    </section>
 
-<!-- SETUP -->
-<section class="sec-dark on-dark" id="setup">
-  <div class="sec-inner">
-    <div class="setup-grid">
-      <div>
-        <div class="sec-label">Setup</div>
-        <h2 class="sec-h">Set up in 5 minutes.<br>Fully live in ~1 week.</h2>
-        <p class="sec-sub">Your customers keep calling the same number. You don't download anything. You don't learn a new system. Just forward your unanswered calls.</p>
-        <div class="setup-steps">
-          <div class="setup-row">
-            <div class="setup-num">1</div>
-            <div class="setup-content">
-              <h4>Sign up and enter your business number</h4>
-              <p>Create your account in 2 minutes. We'll issue you a dedicated toll-free CallLocally number  no extra registration required on your end.</p>
-              <span class="setup-tag">~2 min</span>
+    <!-- TRUST BAR -->
+    <ul class="trustbar wrap">
+      <li>Texts back in <strong>under 60 seconds</strong></li>
+      <li><strong>No new hardware</strong> or software</li>
+      <li>Set up in <strong>5 minutes</strong>, live in <strong>~1 week</strong></li>
+      <li><strong>TCPA compliant</strong> out of the box</li>
+    </ul>
+
+    <!-- HOW IT WORKS -->
+    <section id="how-it-works" class="block">
+      <div class="wrap">
+        <div class="block__head">
+          <h2>Miss the call. <span class="accent">We catch the lead.</span></h2>
+          <p class="block__sub">
+            Three steps, fully automatic. You don't change anything about how
+            you take calls — we just step in when you can't.
+          </p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step__num">01</span>
+            <h3>Customer calls your number</h3>
+            <p>
+              They call the same number they always have. You don't pick up
+              because you're on a job, on a ladder, or covered in grease.
+            </p>
+          </div>
+          <div class="step">
+            <span class="step__num">02</span>
+            <h3>CallLocally texts them instantly</h3>
+            <p>
+              Within 60 seconds, they get a text from your CallLocally number
+              asking what they need and where they're located.
+            </p>
+          </div>
+          <div class="step">
+            <span class="step__num">03</span>
+            <h3>Lead delivered to your phone</h3>
+            <p>
+              You get the caller's name, service need, address, and urgency via
+              SMS and email. Reply on the text and your response goes straight
+              back in the same thread. No second number, no new apps.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="setup" class="block">
+      <div class="wrap">
+        <div class="setup">
+          <div class="setup__intro">
+            <h2>Set up in 5 minutes.<br />Fully live in ~1 week.</h2>
+            <p>
+              Your customers keep calling the same number. You don't download
+              anything. You don't learn a new system. Just forward your
+              unanswered calls.
+            </p>
+            <ol class="setup__list">
+              <li>
+                <h3>Sign up and enter your business number</h3>
+                <p>Create your account in 2 minutes. We'll issue you a dedicated CallLocally number — no extra registration required on your end.</p>
+                <span class="timing">~2 min</span>
+              </li>
+              <li>
+                <h3>Forward unanswered calls on your phone</h3>
+                <p>It's already built into your phone. iPhone: Settings → Phone → Call Forwarding. Android: Phone → Settings → Supplementary services. We show you exactly where.</p>
+                <span class="timing">~3 min</span>
+              </li>
+              <li>
+                <h3>Fully live within the week</h3>
+                <p>Your number goes through a quick 5–7 day carrier verification. Leads still come through during that window; once verified, you're at full delivery strength with zero filtering.</p>
+                <span class="timing">~1 week to full verification</span>
+              </li>
+            </ol>
+          </div>
+
+          <aside class="preview">
+            <p class="preview__title">Live lead example</p>
+            <div class="lead-card">
+              <div class="lead-card__head">
+                <span class="lead-card__phone">(714) 555-0182</span>
+                <span class="lead-card__tag lead-card__tag--urgent">! Urgent</span>
+              </div>
+              <p class="lead-card__line"><strong>Service:</strong> Burst pipe under kitchen sink</p>
+              <p class="lead-card__line"><strong>Address:</strong> 418 Maple St, Anaheim CA</p>
+              <p class="lead-card__quote">"Water is everywhere, we need someone ASAP please"</p>
             </div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-num">2</div>
-            <div class="setup-content">
-              <h4>Forward unanswered calls on your phone</h4>
-              <p>It's already built into your phone. iPhone: Settings  Phone  Call Forwarding. Android: Phone  Settings  Supplementary services. We show you exactly where.</p>
-              <span class="setup-tag">~3 min</span>
+            <div class="lead-card">
+              <div class="lead-card__head">
+                <span class="lead-card__phone">(949) 555-0341</span>
+                <span class="lead-card__tag lead-card__tag--captured">Captured</span>
+              </div>
+              <p class="lead-card__line"><strong>Service:</strong> AC not cooling, thermostat issue</p>
+              <p class="lead-card__line"><strong>Address:</strong> 92 Harbor View Dr, Newport Beach</p>
+              <p class="lead-card__quote">"No AC since yesterday, house is 85 degrees"</p>
             </div>
+            <p class="preview__foot">Both delivered via SMS + email within 60 seconds.</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="block">
+      <div class="wrap">
+        <div class="block__head">
+          <h2>Everything a solo operator needs.</h2>
+          <p class="block__sub">Smart enough to qualify leads. Simple enough to set up yourself.</p>
+        </div>
+
+        <div class="features">
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            <h3>Trade-smart messages</h3>
+            <p>Your missed-call text is tailored to your trade. A plumber's message asks about leaks and clogs. A roofer's asks about repairs vs. inspections. Always relevant.</p>
           </div>
-          <div class="setup-row">
-            <div class="setup-num">3</div>
-            <div class="setup-content">
-              <h4>Fully live within the week</h4>
-              <p>Your number goes through a quick 57 day carrier verification. Leads still come through during that time  once verified, you're at full delivery strength with zero filtering.</p>
-              <span class="setup-tag">~1 week to full verification</span>
-            </div>
+
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Emergency detection</h3>
+            <p>"Urgent," "leaking," "no heat," "flooding" flagged automatically. You get notified first, fast — so you can decide whether to drop what you're doing.</p>
           </div>
-        </div>
-      </div>
-      <div class="setup-preview">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:16px">Live lead example</div>
-        <div class="lead-card">
-          <div class="lead-card-header">
-            <span class="lead-caller">(714) 555-0182</span>
-            <span class="lead-badge">! Urgent</span>
+
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <h3>After-hours mode</h3>
+            <p>Set your business hours. After hours, the message adjusts so you don't sound unavailable forever — just unavailable until tomorrow morning.</p>
           </div>
-          <div class="lead-detail"><b>Service:</b> Burst pipe under kitchen sink</div>
-          <div class="lead-detail"><b>Address:</b> 418 Maple St, Anaheim CA</div>
-          <div class="sms-bubble">"Water is everywhere, we need someone ASAP please"</div>
-        </div>
-        <div class="lead-card">
-          <div class="lead-card-header">
-            <span class="lead-caller">(949) 555-0341</span>
-            <span class="lead-badge" style="background:rgba(34,197,94,0.12);color:#22C55E">Captured</span>
+
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+            <h3>Address capture upfront</h3>
+            <p>No more back-and-forth. We capture the service need and address up front, so you can quote and schedule straight from the text thread.</p>
           </div>
-          <div class="lead-detail"><b>Service:</b> AC not cooling, thermostat issue</div>
-          <div class="lead-detail"><b>Address:</b> 92 Harbor View Dr, Newport Beach</div>
-          <div class="sms-bubble">"No AC since yesterday, house is 85 degrees"</div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">Both delivered via SMS + email within 60 seconds</div>
-      </div>
-    </div>
-  </div>
-</section>
 
-<!-- FEATURES -->
-<section class="sec-light on-light" id="features">
-  <div class="sec-inner">
-    <div class="sec-label on-light">Features</div>
-    <h2 class="sec-h" style="color:#1a1a1a">Everything a solo operator needs.</h2>
-    <p class="sec-sub" style="color:#666">Smart enough to qualify leads. Simple enough to set up yourself.</p>
-    <div class="features-grid">
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 7V5z"/></svg></div>
-        <h3>Trade-smart messages</h3>
-        <p>Your missed call text is tailored to your trade. A plumber's message asks about leaks and clogs. A roofer's asks about repairs vs. inspections. Always relevant.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
-        <h3>Emergency detection</h3>
-        <p>"Urgent," "leaking," "no heat," "flooding"  flagged automatically. You get notified first, fast.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
-        <h3>After-hours mode</h3>
-        <p>Set your business hours. After hours, the message adjusts so you don't sound unavailable forever.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-        <h3>Address capture upfront</h3>
-        <p>No more back-and-forth. We capture the service need and address up front — you can quote and schedule straight from the text thread.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-        <h3>Lead history dashboard</h3>
-        <p>Every missed call, every text exchange, every lead  in one clean dashboard.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-        <h3>Team delivery</h3>
-        <p>On the Team plan, leads go to multiple phones simultaneously  your dispatcher, lead tech, and backup all get notified at once.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- PRICING -->
-<section class="sec-white" id="pricing">
-  <div class="sec-inner">
-    <div style="text-align:center">
-      <div class="sec-label on-light">Pricing</div>
-      <h2 class="sec-h" style="color:#1a1a1a">Simple, transparent pricing.</h2>
-      <p class="sec-sub" style="color:#666;margin:0 auto">One missed $400 job pays for a year of CallLocally. Start free, no credit card.</p>
-    </div>
-    <div class="pricing-grid">
-      <div class="plan">
-        <div class="plan-name">Solo</div>
-        <div class="plan-price">$49<span>/mo</span></div>
-        <div class="plan-desc">For the solo operator who never wants to miss a job again.</div>
-        <ul class="plan-features">
-          <li>1 business number</li>
-          <li>Unlimited lead captures</li>
-          <li>SMS + email delivery</li>
-          <li>Emergency detection</li>
-          <li>Lead dashboard</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-outline" onclick="openModal()">Start Free Trial</button>
-      </div>
-      <div class="plan featured">
-        <div class="plan-badge">Most Popular</div>
-        <div class="plan-name">Growth</div>
-        <div class="plan-price">$79<span>/mo</span></div>
-        <div class="plan-desc">For contractors ready to grow and capture every opportunity.</div>
-        <ul class="plan-features">
-          <li>Everything in Solo</li>
-          <li>After-hours mode</li>
-          <li>Custom intake messages</li>
-          <li>Priority support</li>
-          <li>After-hours custom messaging</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-orange" onclick="openModal()">Start Free Trial</button>
-      </div>
-      <div class="plan">
-        <div class="plan-name">Team</div>
-        <div class="plan-price">$129<span>/mo</span></div>
-        <div class="plan-desc">For small crews with a dispatcher or multiple field techs.</div>
-        <ul class="plan-features">
-          <li>Everything in Growth</li>
-          <li>Multi-member delivery</li>
-          <li>Dispatcher mode</li>
-          <li>Team lead routing</li>
-          <li>Dedicated onboarding</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-outline" onclick="openModal()">Start Free Trial</button>
-      </div>
-    </div>
-    <p class="pricing-note">All plans include a 14-day free trial. No credit card required to start.</p>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section class="sec-light">
-  <div class="sec-inner">
-    <div style="text-align:center;margin-bottom:16px">
-      <div class="sec-label on-light">FAQ</div>
-      <h2 class="sec-h" style="color:#1a1a1a">Common questions.</h2>
-    </div>
-    <div class="faq">
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">Do my customers need to do anything different?</div>
-        <div class="faq-a">Nope. They keep calling the exact same number they always have. The forwarding happens invisibly on your phone  your customers never know anything changed.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What if I answer the call? Will they still get a text?</div>
-        <div class="faq-a">No. CallLocally only fires when a call goes unanswered. If you pick up, everything works exactly as it always did. You set the forwarding to "unanswered calls only" during setup.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">How long does it take before leads actually come through?</div>
-        <div class="faq-a">You're live in 5 minutes  as soon as you set up call forwarding, missed calls trigger texts. Your toll-free number goes through a 57 day carrier verification for full deliverability. Leads come through during that time too, just at standard throughput.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What number do my customers see when they get texted?</div>
-        <div class="faq-a">They'll see your dedicated CallLocally toll-free number. You can customize the message to say your business name so they immediately know who it's from.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">Can I cancel anytime?</div>
-        <div class="faq-a">Yes, anytime. If you cancel, you keep service through the end of your billing period. No fees, no hoops.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What trades does this work for?</div>
-        <div class="faq-a">Any home service trade  plumbers, HVAC techs, electricians, roofers, landscapers, pest control, handymen, painters, pool service, and more. If you miss calls, CallLocally helps.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- CTA BAND -->
-<section class="cta-band">
-  <h2>Stop losing jobs to voicemail.</h2>
-  <p>5 minutes to set up. Fully live within a week. 14 days free, no credit card.</p>
-  <button class="btn btn-white btn-lg" onclick="openModal()">Start Your Free Trial </button>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <p style="margin-bottom:12px">
-    <a href="/dashboard">Dashboard</a>&nbsp;&middot;&nbsp;
-    <a href="mailto:hello@calllocally.com">hello@calllocally.com</a>&nbsp;&middot;&nbsp;
-    <a href="#">Privacy Policy</a>
-  </p>
-  <p>&copy; 2026 CallLocally. All rights reserved.</p>
-</footer>
-
-<!-- MODAL -->
-<div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-  <div class="modal">
-    <button class="modal-close" onclick="closeModal()" aria-label="Close"></button>
-    <div class="modal-logo">
-      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
-      <span class="modal-logo-text">CallLocally</span>
-    </div>
-
-    <div id="signup-form">
-      <h2 id="modal-title">Start your free trial</h2>
-      <p class="modal-sub">Set up in 5 minutes. Fully live within ~1 week. 14 days free, no credit card.</p>
-      <div class="form-error" id="form-error"></div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="f-name">Your name</label>
-          <input class="form-input" id="f-name" type="text" placeholder="Mike Rodriguez" autocomplete="given-name">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-email">Email</label>
-          <input class="form-input" id="f-email" type="email" placeholder="mike@plumbing.com" autocomplete="email">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="f-biz">Business name</label>
-        <input class="form-input" id="f-biz" type="text" placeholder="Mike's Plumbing" autocomplete="organization">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="f-phone">Your business phone</label>
-          <input class="form-input" id="f-phone" type="tel" placeholder="(714) 555-0100" autocomplete="tel">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-carrier">Phone carrier</label>
-          <select class="form-select" id="f-carrier">
-            <option value="tmobile">T-Mobile</option>
-            <option value="att">AT&T</option>
-            <option value="verizon">Verizon</option>
-            <option value="other">Other / Not sure</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-trade">Your trade</label>
-          <select class="form-select" id="f-trade">
-            <option value="plumbing">Plumbing</option>
-            <option value="hvac">HVAC</option>
-            <option value="electrical">Electrical</option>
-            <option value="roofing">Roofing</option>
-            <option value="landscaping">Landscaping</option>
-            <option value="pest">Pest Control</option>
-            <option value="handyman">Handyman</option>
-            <option value="painting">Painting</option>
-            <option value="pool">Pool Service</option>
-            <option value="general">Other</option>
-          </select>
-        </div>
-      </div>
-      <label style="display:flex;align-items:flex-start;gap:8px;margin:16px 0 12px;font-size:12px;color:var(--muted);cursor:pointer;line-height:1.4">
-          <input type="checkbox" id="f-sms-consent" style="margin-top:2px;accent-color:var(--orange);flex-shrink:0">
-          <span>I agree that CallLocally will send automated SMS messages to callers on behalf of my business when calls go unanswered. Msg &amp; data rates may apply.</span>
-        </label>
-        <button class="submit-btn" id="submit-btn" onclick="handleSignup()">Get My CallLocally Number </button>
-    </div>
-
-    <div class="success-screen" id="success-screen">
-      <div style="font-size:48px;margin-bottom:8px">&#9989;</div>
-      <h2 style="color:var(--white);font-size:22px;margin-bottom:6px">You're signed up!</h2>
-      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Your CallLocally toll-free number:</p>
-      <div class="success-num" id="success-num">Loading...</div>
-      <button class="copy-btn" onclick="copyNumber()">Copy number</button>
-
-      <div style="background:rgba(255,92,26,0.1);border:1px solid rgba(255,92,26,0.3);border-radius:10px;padding:16px;margin-top:20px;text-align:left">
-        <p style="font-size:13px;font-weight:700;color:#FF5C1A;margin:0 0 6px">&#9203; Step 1 of 2: Verification in progress</p>
-        <p style="font-size:13px;color:var(--muted);margin:0;line-height:1.6">
-          Your number is being verified by US carriers. This takes <b style="color:var(--text)">1–3 business days</b>.
-          Once approved, we'll email you with your final setup instructions (takes 1 minute).
-        </p>
-      </div>
-
-      <div class="success-note" style="margin-top:16px">
-        <b style="color:var(--white)">While you wait:</b><br><br>
-        &#128241; Check your email for confirmation<br>
-        &#128202; Explore your <a href="/dashboard" style="color:#FF5C1A">dashboard</a><br>
-        &#128337; Setup instructions arrive in 1–3 business days
-      </div>
-
-      <button class="submit-btn" style="margin-top:20px" onclick="window.location.href='/dashboard'">Go to Dashboard &rarr;</button>
-    </div>ml>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CallLocally  Never Miss Another Lead</title>
-<meta name="description" content="Automated SMS callback for home service contractors. Set up in 5 minutes. Fully verified and live within 1 week. No new phone or app needed.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --orange:#FF5C1A;--orange-dark:#D94B12;--orange-pale:#fff3ee;
-  --dark:#0C0F13;--dark-2:#13171D;--dark-3:#1A1F27;
-  --white:#fff;--text:#E2DFD8;--muted:#7A8090;
-  --border:rgba(255,255,255,0.08);
-  --font-d:'Barlow Condensed',sans-serif;
-  --font-b:'DM Sans',sans-serif;
-}
-html{scroll-behavior:smooth}
-body{font-family:var(--font-b);background:#fff;color:#1a1a1a;-webkit-font-smoothing:antialiased}
-
-/* NAV */
-nav{position:sticky;top:0;z-index:100;background:rgba(12,15,19,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 5%}
-.nav-inner{max-width:1100px;margin:0 auto;height:62px;display:flex;align-items:center;justify-content:space-between}
-.nav-logo{display:flex;align-items:center;gap:9px;text-decoration:none}
-.nav-logo-text{font-family:var(--font-d);font-size:22px;font-weight:800;color:var(--white);letter-spacing:-0.3px}
-.nav-links{display:flex;align-items:center;gap:28px}
-.nav-links a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;transition:color 0.15s}
-.nav-links a:hover{color:var(--white)}
-.nav-cta{background:var(--orange);color:white!important;padding:8px 18px;border-radius:8px;font-weight:600!important;transition:background 0.15s!important}
-.nav-cta:hover{background:var(--orange-dark)!important}
-@media(max-width:600px){.nav-links{display:none}}
-
-/* HERO */
-.hero{background:var(--dark);padding:90px 5% 80px;text-align:center;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:700px;height:700px;background:radial-gradient(circle,rgba(255,92,26,0.12) 0%,transparent 70%);pointer-events:none}
-.hero-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(255,92,26,0.12);border:1px solid rgba(255,92,26,0.25);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;color:var(--orange);margin-bottom:24px}
-.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--orange);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-.hero h1{font-family:var(--font-d);font-size:clamp(52px,8vw,88px);font-weight:900;line-height:0.95;letter-spacing:-1px;color:var(--white);margin-bottom:22px}
-.hero h1 em{font-style:normal;color:var(--orange)}
-.hero-sub{font-size:clamp(17px,2.5vw,20px);color:var(--muted);max-width:580px;margin:0 auto 32px;line-height:1.6}
-.hero-pill{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:30px;padding:8px 18px;margin-bottom:32px}
-.hero-pill-check{width:20px;height:20px;border-radius:50%;background:var(--orange);color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.hero-pill span{font-size:14px;font-weight:500;color:var(--text)}
-.hero-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 28px;border-radius:10px;font-size:16px;font-weight:600;text-decoration:none;cursor:pointer;border:none;font-family:var(--font-b);transition:all 0.15s}
-.btn-orange{background:var(--orange);color:white}
-.btn-orange:hover{background:var(--orange-dark);transform:translateY(-1px)}
-.btn-outline{background:transparent;color:var(--text);border:1.5px solid rgba(255,255,255,0.2)}
-.btn-outline:hover{border-color:rgba(255,255,255,0.4);color:var(--white)}
-.btn-lg{padding:16px 32px;font-size:17px}
-.hero-note{font-size:13px;color:var(--muted)}
-
-/* TRUST BAR */
-.trust{background:var(--dark-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 5%;display:flex;align-items:center;justify-content:center;gap:32px;flex-wrap:wrap}
-.trust-item{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.trust-item b{color:var(--text)}
-
-/* SECTIONS */
-.sec-dark{background:var(--dark);padding:80px 5%;color:var(--text)}
-.sec-light{background:#f8f7f5;padding:80px 5%}
-.sec-white{background:#fff;padding:80px 5%}
-.sec-inner{max-width:1100px;margin:0 auto}
-.sec-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--orange);margin-bottom:12px}
-.sec-label.on-light{color:var(--orange)}
-.sec-h{font-family:var(--font-d);font-size:clamp(36px,5vw,52px);font-weight:800;line-height:1.05;margin-bottom:14px}
-.sec-sub{font-size:17px;color:#666;line-height:1.6;max-width:540px}
-.on-dark .sec-h{color:var(--white)}
-.on-dark .sec-sub{color:var(--muted)}
-
-/* HOW IT WORKS */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:52px}
-@media(max-width:768px){.steps{grid-template-columns:1fr}}
-.step{background:var(--dark-2);border:1px solid var(--border);border-radius:16px;padding:28px}
-.step-num{font-family:var(--font-d);font-size:48px;font-weight:900;color:var(--orange);line-height:1;margin-bottom:14px}
-.step h3{font-size:18px;font-weight:600;color:var(--white);margin-bottom:8px}
-.step p{font-size:14px;color:var(--muted);line-height:1.6}
-
-/* SETUP */
-.setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
-@media(max-width:768px){.setup-grid{grid-template-columns:1fr;gap:40px}}
-.setup-steps{display:flex;flex-direction:column}
-.setup-row{display:flex;gap:18px;padding:22px 0;border-bottom:1px solid var(--border)}
-.setup-row:last-child{border-bottom:none}
-.setup-num{width:30px;height:30px;border-radius:50%;background:var(--orange);color:white;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
-.setup-content h4{font-size:16px;font-weight:600;color:var(--white);margin-bottom:4px}
-.setup-content p{font-size:14px;color:var(--muted);line-height:1.6}
-.setup-tag{display:inline-block;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--muted);margin-top:6px}
-.setup-preview{background:var(--dark-2);border:1px solid var(--border);border-radius:16px;padding:24px;position:sticky;top:80px}
-.lead-card{background:var(--dark-3);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
-.lead-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.lead-caller{font-size:15px;font-weight:600;color:var(--white)}
-.lead-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,92,26,0.15);color:var(--orange)}
-.lead-detail{font-size:13px;color:var(--muted);margin-bottom:4px}
-.lead-detail b{color:var(--text)}
-.sms-bubble{background:rgba(255,255,255,0.06);border-radius:10px 10px 10px 2px;padding:10px 14px;font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5}
-
-/* FEATURES */
-.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
-@media(max-width:900px){.features-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:580px){.features-grid{grid-template-columns:1fr}}
-.feature{background:#fff;border:1.5px solid #eee;border-radius:14px;padding:24px}
-.feature-icon{font-size:28px;margin-bottom:14px}
-.feature h3{font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:6px}
-.feature p{font-size:14px;color:#666;line-height:1.6}
-
-/* PRICING */
-.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px;max-width:900px;margin-left:auto;margin-right:auto}
-@media(max-width:700px){.pricing-grid{grid-template-columns:1fr}}
-.plan{background:#fff;border:2px solid #e8e8e8;border-radius:16px;padding:28px;position:relative}
-.plan.featured{border-color:var(--orange);box-shadow:0 0 0 4px rgba(255,92,26,0.08)}
-.plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--orange);color:white;font-size:12px;font-weight:700;padding:3px 14px;border-radius:10px;white-space:nowrap}
-.plan-name{font-size:15px;font-weight:700;color:#666;margin-bottom:8px}
-.plan-price{font-family:var(--font-d);font-size:52px;font-weight:900;color:#1a1a1a;line-height:1}
-.plan-price span{font-size:18px;font-weight:500;color:#999}
-.plan-desc{font-size:14px;color:#888;margin:10px 0 20px}
-.plan-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
-.plan-features li{font-size:14px;color:#555;display:flex;align-items:center;gap:8px}
-.plan-features li::before{content:'';color:var(--orange);font-weight:700;flex-shrink:0}
-.plan-btn{width:100%;padding:13px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:none;font-family:var(--font-b);transition:all 0.15s}
-.plan-btn-orange{background:var(--orange);color:white}
-.plan-btn-orange:hover{background:var(--orange-dark)}
-.plan-btn-outline{background:transparent;color:#1a1a1a;border:2px solid #ddd}
-.plan-btn-outline:hover{border-color:var(--orange);color:var(--orange)}
-.pricing-note{text-align:center;margin-top:20px;font-size:14px;color:#888}
-
-/* FAQ */
-.faq{max-width:680px;margin:0 auto;margin-top:48px}
-.faq-item{border-bottom:1px solid #eee;padding:20px 0;cursor:pointer}
-.faq-q{font-size:16px;font-weight:600;color:#1a1a1a;display:flex;justify-content:space-between;align-items:center;gap:16px}
-.faq-q::after{content:'+';font-size:22px;color:var(--orange);flex-shrink:0;transition:transform 0.2s}
-.faq-item.open .faq-q::after{transform:rotate(45deg)}
-.faq-a{font-size:15px;color:#666;line-height:1.7;max-height:0;overflow:hidden;transition:max-height 0.3s ease,margin 0.3s}
-.faq-item.open .faq-a{max-height:300px;margin-top:12px}
-
-/* CTA BAND */
-.cta-band{background:var(--orange);padding:64px 5%;text-align:center}
-.cta-band h2{font-family:var(--font-d);font-size:clamp(36px,5vw,52px);font-weight:900;color:white;margin-bottom:10px}
-.cta-band p{font-size:18px;color:rgba(255,255,255,0.85);margin-bottom:28px}
-.btn-white{background:white;color:var(--orange)}
-.btn-white:hover{background:#fff3ee}
-
-/* FOOTER */
-footer{background:var(--dark);border-top:1px solid var(--border);padding:40px 5%;text-align:center}
-footer p{font-size:13px;color:var(--muted)}
-footer a{color:var(--muted);text-decoration:none}
-footer a:hover{color:var(--white)}
-
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
-.modal-overlay.open{display:flex}
-.modal{background:var(--dark-2);border:1px solid var(--border);border-radius:20px;padding:36px;width:100%;max-width:440px;position:relative;max-height:90vh;overflow-y:auto}
-.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:4px}
-.modal-close:hover{color:var(--white)}
-.modal-logo{display:flex;align-items:center;gap:8px;margin-bottom:20px}
-.modal-logo-text{font-family:var(--font-d);font-size:20px;font-weight:800;color:var(--white)}
-.modal h2{font-size:22px;font-weight:700;color:var(--white);margin-bottom:4px}
-.modal-sub{font-size:14px;color:var(--muted);margin-bottom:24px}
-.form-group{margin-bottom:16px}
-.form-label{display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
-.form-input,.form-select{width:100%;background:var(--dark-3);border:1.5px solid rgba(255,255,255,0.1);border-radius:10px;padding:11px 14px;font-size:15px;color:var(--white);font-family:var(--font-b);outline:none;transition:border-color 0.15s}
-.form-input::placeholder{color:var(--muted)}
-.form-input:focus,.form-select:focus{border-color:rgba(255,92,26,0.5)}
-.form-select option{background:var(--dark-3)}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.submit-btn{width:100%;padding:14px;background:var(--orange);color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;font-family:var(--font-b);margin-top:8px;transition:background 0.15s}
-.submit-btn:hover{background:var(--orange-dark)}
-.submit-btn:disabled{opacity:0.6;cursor:not-allowed}
-.form-error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:14px;display:none}
-.form-error.show{display:block}
-.success-screen{display:none;text-align:center;padding:16px 0}
-.success-screen.show{display:block}
-.success-num{font-size:36px;font-weight:800;color:var(--orange);font-family:var(--font-d);letter-spacing:2px;margin:16px 0 8px}
-.success-note{font-size:14px;color:var(--muted);line-height:1.7}
-.copy-btn{background:var(--dark-3);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;color:var(--muted);cursor:pointer;font-family:var(--font-b);margin-top:10px;transition:all 0.15s}
-.copy-btn:hover{color:var(--white);border-color:rgba(255,255,255,0.2)}
-</style>
-</head>
-<body>
-
-<!-- NAV -->
-<nav>
-  <div class="nav-inner">
-    <a href="/" class="nav-logo">
-      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/><path d="M26 15H27C28.1 15 29 15.9 29 17V22C29 23.1 28.1 24 27 24H25.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span class="nav-logo-text">CallLocally</span>
-    </a>
-    <div class="nav-links">
-      <a href="#how">How it works</a>
-      <a href="#setup">Setup</a>
-      <a href="#pricing">Pricing</a>
-      <a href="/dashboard">Login</a>
-      <a href="#" class="nav-cta" onclick="openModal();return false">Start Free Trial</a>
-    </div>
-  </div>
-</nav>
-
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-badge"><span class="badge-dot"></span>Built for solo home service contractors</div>
-  <h1>You're on a job.<br>A lead just called.<br><em>You lost $400.</em></h1>
-  <p class="hero-sub">CallLocally texts them back in 60 seconds, captures the lead, and delivers it straight to your phone  while you keep working.</p>
-  <div class="hero-pill">
-    <div class="hero-pill-check"></div>
-    <span>Your existing number &nbsp;&middot;&nbsp; Set up in 5 min &nbsp;&middot;&nbsp; Fully live in ~1 week</span>
-  </div>
-  <div class="hero-actions">
-    <button class="btn btn-orange btn-lg" onclick="openModal()">Start 14-Day Free Trial</button>
-    <a href="#how" class="btn btn-outline btn-lg">See how it works</a>
-  </div>
-  <p class="hero-note">No credit card required &nbsp;&middot;&nbsp; No setup fee &nbsp;&middot;&nbsp; Cancel anytime</p>
-</section>
-
-<!-- TRUST BAR -->
-<div class="trust">
-  <div class="trust-item">&#10003; Texts back in <b>under 60 seconds</b></div>
-  <div class="trust-item">&#128241; <b>No new hardware</b> or software</div>
-  <div class="trust-item">&#9201; Set up in <b>5 min</b> &middot; live in <b>~1 week</b></div>
-  <div class="trust-item">&#10003; <b>TCPA compliant</b> out of the box</div>
-</div>
-
-<!-- HOW IT WORKS -->
-<section class="sec-dark on-dark" id="how">
-  <div class="sec-inner">
-    <div class="sec-label">How it works</div>
-    <h2 class="sec-h">Miss the call.<br>We catch the lead.</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">01</div>
-        <h3>Customer calls your number</h3>
-        <p>They call the same number they always have. You don't pick up  you're on a job, on a ladder, or covered in grease.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">02</div>
-        <h3>CallLocally texts them instantly</h3>
-        <p>Within 60 seconds, they get a text from your CallLocally number asking what they need and where they're located.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">03</div>
-        <h3>Lead delivered to your phone</h3>
-        <p>You get the caller's name, service need, address, and urgency via SMS and email. Just hit reply on the text — your response goes straight back to the customer in the same thread. No second number, no new apps.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- SETUP -->
-<section class="sec-dark on-dark" id="setup">
-  <div class="sec-inner">
-    <div class="setup-grid">
-      <div>
-        <div class="sec-label">Setup</div>
-        <h2 class="sec-h">Set up in 5 minutes.<br>Fully live in ~1 week.</h2>
-        <p class="sec-sub">Your customers keep calling the same number. You don't download anything. You don't learn a new system. Just forward your unanswered calls.</p>
-        <div class="setup-steps">
-          <div class="setup-row">
-            <div class="setup-num">1</div>
-            <div class="setup-content">
-              <h4>Sign up and enter your business number</h4>
-              <p>Create your account in 2 minutes. We'll issue you a dedicated toll-free CallLocally number  no extra registration required on your end.</p>
-              <span class="setup-tag">~2 min</span>
-            </div>
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+            <h3>Lead history dashboard</h3>
+            <p>Every missed call, every text exchange, every lead — all in one clean dashboard you can pull up between jobs to follow up on what you missed.</p>
           </div>
-          <div class="setup-row">
-            <div class="setup-num">2</div>
-            <div class="setup-content">
-              <h4>Forward unanswered calls on your phone</h4>
-              <p>It's already built into your phone. iPhone: Settings  Phone  Call Forwarding. Android: Phone  Settings  Supplementary services. We show you exactly where.</p>
-              <span class="setup-tag">~3 min</span>
-            </div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-num">3</div>
-            <div class="setup-content">
-              <h4>Fully live within the week</h4>
-              <p>Your number goes through a quick 57 day carrier verification. Leads still come through during that time  once verified, you're at full delivery strength with zero filtering.</p>
-              <span class="setup-tag">~1 week to full verification</span>
-            </div>
+
+          <div class="feature">
+            <svg class="feature__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <h3>Multi-phone delivery</h3>
+            <p>Add your spouse, an admin, or a backup tech to the notification list. Every missed-call lead goes to every phone at the same time — no one waits.</p>
           </div>
         </div>
       </div>
-      <div class="setup-preview">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:16px">Live lead example</div>
-        <div class="lead-card">
-          <div class="lead-card-header">
-            <span class="lead-caller">(714) 555-0182</span>
-            <span class="lead-badge">! Urgent</span>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing" class="block">
+      <div class="wrap">
+        <div class="block__head block__head--center">
+          <h2>One plan. <span class="accent">Everything included.</span></h2>
+          <p class="block__sub">One missed $400 job pays for over a year of CallLocally.</p>
+        </div>
+
+        <div class="pricing-card">
+          <div class="pricing-card__price">
+            <span class="pricing-card__amount">$29</span>
+            <span class="pricing-card__per">/month</span>
           </div>
-          <div class="lead-detail"><b>Service:</b> Burst pipe under kitchen sink</div>
-          <div class="lead-detail"><b>Address:</b> 418 Maple St, Anaheim CA</div>
-          <div class="sms-bubble">"Water is everywhere, we need someone ASAP please"</div>
-        </div>
-        <div class="lead-card">
-          <div class="lead-card-header">
-            <span class="lead-caller">(949) 555-0341</span>
-            <span class="lead-badge" style="background:rgba(34,197,94,0.12);color:#22C55E">Captured</span>
-          </div>
-          <div class="lead-detail"><b>Service:</b> AC not cooling, thermostat issue</div>
-          <div class="lead-detail"><b>Address:</b> 92 Harbor View Dr, Newport Beach</div>
-          <div class="sms-bubble">"No AC since yesterday, house is 85 degrees"</div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">Both delivered via SMS + email within 60 seconds</div>
-      </div>
-    </div>
-  </div>
-</section>
+          <p class="pricing-card__tag">For solo operators who never want to miss a job again.</p>
 
-<!-- FEATURES -->
-<section class="sec-light on-light" id="features">
-  <div class="sec-inner">
-    <div class="sec-label on-light">Features</div>
-    <h2 class="sec-h" style="color:#1a1a1a">Everything a solo operator needs.</h2>
-    <p class="sec-sub" style="color:#666">Smart enough to qualify leads. Simple enough to set up yourself.</p>
-    <div class="features-grid">
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 7V5z"/></svg></div>
-        <h3>Trade-smart messages</h3>
-        <p>Your missed call text is tailored to your trade. A plumber's message asks about leaks and clogs. A roofer's asks about repairs vs. inspections. Always relevant.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
-        <h3>Emergency detection</h3>
-        <p>"Urgent," "leaking," "no heat," "flooding"  flagged automatically. You get notified first, fast.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
-        <h3>After-hours mode</h3>
-        <p>Set your business hours. After hours, the message adjusts so you don't sound unavailable forever.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-        <h3>Address capture upfront</h3>
-        <p>No more back-and-forth. We capture the service need and address up front — you can quote and schedule straight from the text thread.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-        <h3>Lead history dashboard</h3>
-        <p>Every missed call, every text exchange, every lead  in one clean dashboard.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-        <h3>Team delivery</h3>
-        <p>On the Team plan, leads go to multiple phones simultaneously  your dispatcher, lead tech, and backup all get notified at once.</p>
-      </div>
-    </div>
-  </div>
-</section>
+          <ul>
+            <li>Your own dedicated CallLocally number</li>
+            <li>Unlimited missed-call lead captures</li>
+            <li>SMS + email delivery</li>
+            <li>Trade-smart messages tuned to your work</li>
+            <li>Emergency word detection</li>
+            <li>Address &amp; service capture up front</li>
+            <li>After-hours mode</li>
+            <li>Multi-phone delivery (spouse, admin, backup)</li>
+            <li>Full lead history dashboard</li>
+            <li>14-day free trial · cancel anytime</li>
+          </ul>
 
-<!-- PRICING -->
-<section class="sec-white" id="pricing">
-  <div class="sec-inner">
-    <div style="text-align:center">
-      <div class="sec-label on-light">Pricing</div>
-      <h2 class="sec-h" style="color:#1a1a1a">Simple, transparent pricing.</h2>
-      <p class="sec-sub" style="color:#666;margin:0 auto">One missed $400 job pays for a year of CallLocally. Start free, no credit card.</p>
-    </div>
-    <div class="pricing-grid">
-      <div class="plan">
-        <div class="plan-name">Solo</div>
-        <div class="plan-price">$49<span>/mo</span></div>
-        <div class="plan-desc">For the solo operator who never wants to miss a job again.</div>
-        <ul class="plan-features">
-          <li>1 business number</li>
-          <li>Unlimited lead captures</li>
-          <li>SMS + email delivery</li>
-          <li>Emergency detection</li>
-          <li>Lead dashboard</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-outline" onclick="openModal()">Start Free Trial</button>
-      </div>
-      <div class="plan featured">
-        <div class="plan-badge">Most Popular</div>
-        <div class="plan-name">Growth</div>
-        <div class="plan-price">$79<span>/mo</span></div>
-        <div class="plan-desc">For contractors ready to grow and capture every opportunity.</div>
-        <ul class="plan-features">
-          <li>Everything in Solo</li>
-          <li>After-hours mode</li>
-          <li>Custom intake messages</li>
-          <li>Priority support</li>
-          <li>After-hours custom messaging</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-orange" onclick="openModal()">Start Free Trial</button>
-      </div>
-      <div class="plan">
-        <div class="plan-name">Team</div>
-        <div class="plan-price">$129<span>/mo</span></div>
-        <div class="plan-desc">For small crews with a dispatcher or multiple field techs.</div>
-        <ul class="plan-features">
-          <li>Everything in Growth</li>
-          <li>Multi-member delivery</li>
-          <li>Dispatcher mode</li>
-          <li>Team lead routing</li>
-          <li>Dedicated onboarding</li>
-          <li>14-day free trial</li>
-        </ul>
-        <button class="plan-btn plan-btn-outline" onclick="openModal()">Start Free Trial</button>
-      </div>
-    </div>
-    <p class="pricing-note">All plans include a 14-day free trial. No credit card required to start.</p>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section class="sec-light">
-  <div class="sec-inner">
-    <div style="text-align:center;margin-bottom:16px">
-      <div class="sec-label on-light">FAQ</div>
-      <h2 class="sec-h" style="color:#1a1a1a">Common questions.</h2>
-    </div>
-    <div class="faq">
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">Do my customers need to do anything different?</div>
-        <div class="faq-a">Nope. They keep calling the exact same number they always have. The forwarding happens invisibly on your phone  your customers never know anything changed.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What if I answer the call? Will they still get a text?</div>
-        <div class="faq-a">No. CallLocally only fires when a call goes unanswered. If you pick up, everything works exactly as it always did. You set the forwarding to "unanswered calls only" during setup.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">How long does it take before leads actually come through?</div>
-        <div class="faq-a">You're live in 5 minutes  as soon as you set up call forwarding, missed calls trigger texts. Your toll-free number goes through a 57 day carrier verification for full deliverability. Leads come through during that time too, just at standard throughput.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What number do my customers see when they get texted?</div>
-        <div class="faq-a">They'll see your dedicated CallLocally toll-free number. You can customize the message to say your business name so they immediately know who it's from.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">Can I cancel anytime?</div>
-        <div class="faq-a">Yes, anytime. If you cancel, you keep service through the end of your billing period. No fees, no hoops.</div>
-      </div>
-      <div class="faq-item" onclick="toggleFaq(this)">
-        <div class="faq-q">What trades does this work for?</div>
-        <div class="faq-a">Any home service trade  plumbers, HVAC techs, electricians, roofers, landscapers, pest control, handymen, painters, pool service, and more. If you miss calls, CallLocally helps.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- CTA BAND -->
-<section class="cta-band">
-  <h2>Stop losing jobs to voicemail.</h2>
-  <p>5 minutes to set up. Fully live within a week. 14 days free, no credit card.</p>
-  <button class="btn btn-white btn-lg" onclick="openModal()">Start Your Free Trial </button>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <p style="margin-bottom:12px">
-    <a href="/dashboard">Dashboard</a>&nbsp;&middot;&nbsp;
-    <a href="mailto:hello@calllocally.com">hello@calllocally.com</a>&nbsp;&middot;&nbsp;
-    <a href="#">Privacy Policy</a>
-  </p>
-  <p>&copy; 2026 CallLocally. All rights reserved.</p>
-</footer>
-
-<!-- MODAL -->
-<div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-  <div class="modal">
-    <button class="modal-close" onclick="closeModal()" aria-label="Close"></button>
-    <div class="modal-logo">
-      <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
-      <span class="modal-logo-text">CallLocally</span>
-    </div>
-
-    <div id="signup-form">
-      <h2 id="modal-title">Start your free trial</h2>
-      <p class="modal-sub">Set up in 5 minutes. Fully live within ~1 week. 14 days free, no credit card.</p>
-      <div class="form-error" id="form-error"></div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="f-name">Your name</label>
-          <input class="form-input" id="f-name" type="text" placeholder="Mike Rodriguez" autocomplete="given-name">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-email">Email</label>
-          <input class="form-input" id="f-email" type="email" placeholder="mike@plumbing.com" autocomplete="email">
+          <a class="btn btn--primary btn--large" href="/signup">Start your 14-day free trial</a>
+          <p class="pricing-card__fine">Card on file required to start the trial. You're not charged until day 15.</p>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="f-biz">Business name</label>
-        <input class="form-input" id="f-biz" type="text" placeholder="Mike's Plumbing" autocomplete="organization">
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="block">
+      <div class="wrap">
+        <div class="block__head block__head--center">
+          <h2>Common questions.</h2>
+        </div>
+
+        <div class="faq">
+          <details>
+            <summary>Do my customers need to do anything different?</summary>
+            <p>No. They keep calling the same number you've always used. The forwarding happens silently on your end — they never know a service is involved unless they don't reach you and get a text back.</p>
+          </details>
+          <details>
+            <summary>What if I answer the call? Will they still get a text?</summary>
+            <p>No. CallLocally only kicks in when the call goes unanswered and is forwarded by your carrier. If you pick up, nothing happens on our side.</p>
+          </details>
+          <details>
+            <summary>How long does it take before leads actually come through?</summary>
+            <p>Forwarding works the moment you set it up — usually within 5 minutes of finishing signup. Full carrier verification on the texting number takes about a week, but leads still flow during that window at slightly reduced delivery strength.</p>
+          </details>
+          <details>
+            <summary>What number do my customers see when they get texted?</summary>
+            <p>A dedicated CallLocally number that's exclusively yours. It's a real local 10-digit number, not a short code — so customers can reply naturally and the thread looks like any other text conversation.</p>
+          </details>
+          <details>
+            <summary>Can I cancel anytime?</summary>
+            <p>Yes. Cancel from your dashboard in two clicks. No contracts, no commitments. If you cancel during the 14-day trial, you're not charged anything.</p>
+          </details>
+          <details>
+            <summary>What trades does this work for?</summary>
+            <p>CallLocally is built specifically for home service contractors — plumbers, HVAC technicians, electricians, roofers, and similar trades. The intake messages and emergency detection are tuned to the kinds of jobs you actually get. If you work the trades and miss calls while on jobs, this is for you.</p>
+          </details>
+        </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="f-phone">Your business phone</label>
-          <input class="form-input" id="f-phone" type="tel" placeholder="(714) 555-0100" autocomplete="tel">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-carrier">Phone carrier</label>
-          <select class="form-select" id="f-carrier">
-            <option value="tmobile">T-Mobile</option>
-            <option value="att">AT&T</option>
-            <option value="verizon">Verizon</option>
-            <option value="other">Other / Not sure</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-trade">Your trade</label>
-          <select class="form-select" id="f-trade">
-            <option value="plumbing">Plumbing</option>
-            <option value="hvac">HVAC</option>
-            <option value="electrical">Electrical</option>
-            <option value="roofing">Roofing</option>
-            <option value="landscaping">Landscaping</option>
-            <option value="pest">Pest Control</option>
-            <option value="handyman">Handyman</option>
-            <option value="painting">Painting</option>
-            <option value="pool">Pool Service</option>
-            <option value="general">Other</option>
-          </select>
-        </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="final">
+      <div class="wrap">
+        <h2>Stop losing jobs to voicemail.</h2>
+        <p>5 minutes to set up. Fully live within a week. 14 days free, then $29/month.</p>
+        <a class="btn btn--primary btn--large" href="/signup">Start your free trial</a>
       </div>
-      <button class="submit-btn" id="submit-btn" onclick="handleSignup()">Get My CallLocally Number </button>
+    </section>
+
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <div class="footer__row">
+        <div class="brand">CallLocally</div>
+        <nav class="footer__links">
+          <a href="/dashboard">Dashboard</a>
+          <a href="mailto:hello@calllocally.com">hello@calllocally.com</a>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+          <a href="/sms.html">SMS program</a>
+        </nav>
+      </div>
+      <div class="footer__legal">© 2026 CallLocally · Newport Beach, California · All rights reserved.</div>
     </div>
+  </footer>
 
-    <div class="success-screen" id="success-screen">
-      <div style="font-size:48px;margin-bottom:8px">Â</div>
-      <h2 style="color:var(--white);font-size:22px;margin-bottom:6px">You're almost live!</h2>
-      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Your CallLocally toll-free number:</p>
-      <div class="success-num" id="success-num">Loading...</div>
-      <button class="copy-btn" onclick="copyNumber()">Copy number</button>
-      <div class="success-note" style="margin-top:20px">
-        <b style="color:var(--white)">Last step:</b> Forward unanswered calls to this number.<br><br>
-        <b style="color:var(--text)">iPhone:</b> Settings  Phone  Call Forwarding  On<br>
-        <b style="color:var(--text)">Android:</b> Phone    Settings  Forward when unanswered<br><br>
-        Check your email for full instructions. You're fully live within ~1 week once carrier verification completes.
-      </div>
-      <button class="submit-btn" style="margin-top:20px" onclick="window.location.href='/dashboard'">Go to Dashboard </button>
-    </div>
-  </div>
-</div>
-
-<script>
-const API = 'https://calllocally.com';
-
-function openModal() {
-  document.getElementById('modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeModal() {
-  document.getElementById('modal').classList.remove('open');
-  document.body.style.overflow = '';
-}
-document.getElementById('modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('modal')) closeModal();
-});
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-async function handleSignup() {
-  const name = document.getElementById('f-name').value.trim();
-  const email = document.getElementById('f-email').value.trim();
-  const businessName = document.getElementById('f-biz').value.trim();
-  const businessPhone = document.getElementById('f-phone').value.trim();
-  const trade = document.getElementById('f-trade').value;
-  const carrier = document.getElementById('f-carrier').value;
-      
-      const smsConsent = document.getElementById('f-sms-consent').checked;
-      if (!smsConsent) { formError.textContent = 'You must agree to SMS messaging terms'; formError.style.display = 'block'; btn.disabled = false; btn.textContent = 'Get My CallLocally Number'; return; }
-  const errEl = document.getElementById('form-error');
-  const btn = document.getElementById('submit-btn');
-
-  errEl.classList.remove('show');
-  if (!name || !email || !businessName || !businessPhone) {
-    errEl.textContent = 'Please fill in all fields.';
-    errEl.classList.add('show');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Setting up your number...';
-
-  try {
-    const res = await fetch(API + '/api/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, businessName, businessPhone, trade, carrier, smsConsent: true }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Something went wrong');
-
-    // Store userId for dashboard
-    sessionStorage.setItem('cl_userId', data.userId);
-    document.getElementById('success-num').textContent = data.twilioNumber;
-    document.getElementById('signup-form').style.display = 'none';
-    document.getElementById('success-screen').classList.add('show');
-  } catch (err) {
-    errEl.textContent = err.message;
-    errEl.classList.add('show');
-    btn.disabled = false;
-    btn.textContent = 'Get My CallLocally Number ';
-  }
-}
-
-function copyNumber() {
-  const num = document.getElementById('success-num').textContent;
-  navigator.clipboard.writeText(num).then(() => {
-    const btn = document.querySelector('.copy-btn');
-    btn.textContent = 'Copied!';
-    setTimeout(() => btn.textContent = 'Copy number', 1800);
-  });
-}
-
-function toggleFaq(el) {
-  el.classList.toggle('open');
-}
-</script>
 </body>
 </html>
