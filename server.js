@@ -552,7 +552,7 @@ app.post('/api/signup', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // ---- Stripe: customer + subscription with 14-day trial ----
+    // ---- Stripe: create customer (stores the card; does NOT start the trial clock) ----
     const customer = await stripe.customers.create({
       email: email.toLowerCase(),
       name,
@@ -562,18 +562,35 @@ app.post('/api/signup', async (req, res) => {
       invoice_settings: { default_payment_method: paymentMethodId },
     });
 
-    const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: STRIPE_PRICE_STANDARD }],
-      trial_period_days: 14,
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
-    });
-
-    // ---- Twilio: provision 10DLC, add to messaging service ----
+    // ---- Twilio: provision the 10DLC number FIRST ----
+    // Per Decisions Log (2026-05-13): the 14-day trial clock must not start until the
+    // contractor's number is confirmed provisioned and operational. So provisioning
+    // happens before the Stripe subscription is created below.
     const areaCode = extractAreaCode(normalizedBusinessPhone);
     const { phoneNumber, phoneNumberSid } = await provision10DLC(areaCode);
+
+    // ---- Stripe: create the subscription AFTER provisioning (this starts the trial) ----
+    // If subscription creation fails here, release the number we just bought so it is
+    // not left orphaned on the account.
+    let subscription;
+    try {
+      subscription = await stripe.subscriptions.create({
+        customer: customer.id,
+        items: [{ price: STRIPE_PRICE_STANDARD }],
+        trial_period_days: 14,
+        payment_behavior: 'default_incomplete',
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        expand: ['latest_invoice.payment_intent'],
+      });
+    } catch (subErr) {
+      try {
+        await twilioClient.incomingPhoneNumbers(phoneNumberSid).remove();
+        log.warn('released orphaned number after Stripe subscription failure', phoneNumber);
+      } catch (relErr) {
+        log.error('failed to release orphaned number', phoneNumberSid, relErr.message);
+      }
+      throw subErr;
+    }
 
     // ---- DB: insert user ----
     const userId = newId('usr_');
