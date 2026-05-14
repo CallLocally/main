@@ -39,6 +39,7 @@ const {
   TWILIO_AUTH_TOKEN,
   TWILIO_MESSAGING_SERVICE_SID,
   STRIPE_SECRET_KEY,
+  STRIPE_PUBLISHABLE_KEY,
   STRIPE_PRICE_STANDARD,
   STRIPE_WEBHOOK_SECRET,
   SENDGRID_API_KEY,
@@ -51,7 +52,7 @@ const {
 
 const REQUIRED_ENV = [
   'DATABASE_URL', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN',
-  'TWILIO_MESSAGING_SERVICE_SID', 'STRIPE_SECRET_KEY',
+  'TWILIO_MESSAGING_SERVICE_SID', 'STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY',
   'STRIPE_PRICE_STANDARD', 'STRIPE_WEBHOOK_SECRET', 'SENDGRID_API_KEY',
 ];
 for (const k of REQUIRED_ENV) {
@@ -1101,8 +1102,14 @@ app.post('/api/billing-portal', requireAuth, async (req, res) => {
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
 
+// Public client config — the Stripe publishable key is safe to expose; it's
+// designed to be used in browser code. The signup page fetches this on load.
+app.get('/api/config', (_req, res) => {
+  res.json({ stripePublishableKey: STRIPE_PUBLISHABLE_KEY });
+});
+
 app.get('/dashboard', (_req, res) => res.sendFile(path.join(publicDir, 'dashboard.html')));
-app.get('/signup',    (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('/signup',    (_req, res) => res.sendFile(path.join(publicDir, 'signup.html')));
 app.get('/login',     (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
 // Catch-all for any other GET → index.html (landing)

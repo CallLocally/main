@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Start your free trial &mdash; CallLocally</title>
+<link rel="icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --orange:#FF5C1A;--orange-dark:#D94B12;
+  --bg:#0C0F13;--bg2:#13171D;--bg3:#1A1F27;
+  --white:#fff;--text:#E2DFD8;--muted:#7A8090;
+  --border:rgba(255,255,255,0.08);
+  --green:#86EFAC;--red:#FCA5A5;
+  --font:'DM Sans',sans-serif;--font-d:'Barlow Condensed',sans-serif;
+}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+body{padding:32px 16px}
+a{color:var(--orange);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.wrap{max-width:520px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:24px}
+.brand-text{font-family:var(--font-d);font-size:22px;font-weight:800;color:var(--white)}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px}
+@media(max-width:480px){.card{padding:22px}}
+.h1{font-family:var(--font-d);font-size:30px;font-weight:800;color:var(--white);line-height:1.1;margin-bottom:8px}
+.sub{font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px}
+
+.trust-strip{display:flex;flex-wrap:wrap;gap:6px 16px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:24px}
+.trust-item{font-size:12.5px;color:var(--text)}
+.trust-item b{color:var(--orange);font-weight:600}
+
+.group{margin-bottom:22px}
+.group-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+.field-label{display:block;font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px}
+.field-label .opt{color:var(--muted);font-weight:400}
+.form-input,.form-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 12px;font-size:14px;color:var(--white);font-family:var(--font);outline:none;transition:border-color 0.15s}
+.form-input:focus,.form-select:focus{border-color:rgba(255,92,26,0.45)}
+.form-input::placeholder{color:var(--muted)}
+.form-select option{background:var(--bg3)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.row2{grid-template-columns:1fr}}
+
+/* Stripe card element */
+.card-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;transition:border-color 0.15s}
+.card-box.focused{border-color:rgba(255,92,26,0.45)}
+.card-box.invalid{border-color:rgba(220,38,38,0.5)}
+.card-note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}
+.card-err{font-size:12.5px;color:var(--red);margin-top:6px;min-height:0}
+
+/* consent */
+.consent{display:flex;gap:10px;align-items:flex-start;margin-bottom:20px}
+.consent input{margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--orange)}
+.consent label{font-size:12.5px;color:var(--muted);line-height:1.55}
+
+.submit-btn{width:100%;padding:14px;background:var(--orange);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background 0.15s}
+.submit-btn:hover{background:var(--orange-dark)}
+.submit-btn:disabled{opacity:0.6;cursor:not-allowed}
+.submit-note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+
+.form-err{background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:11px 14px;font-size:13px;color:var(--red);margin-bottom:16px;display:none;line-height:1.5}
+
+.foot{text-align:center;font-size:12.5px;color:var(--muted);margin-top:18px;line-height:1.6}
+
+/* success state */
+.success{display:none;text-align:center}
+.success .check{width:52px;height:52px;border-radius:50%;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px}
+.success h2{font-family:var(--font-d);font-size:26px;font-weight:800;color:var(--white);margin-bottom:8px}
+.success .num{font-family:monospace;font-size:18px;color:var(--orange);background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;margin:14px 0 6px}
+.success .fwd{font-family:monospace;font-size:20px;color:var(--white);background:var(--bg3);border:1px solid rgba(255,92,26,0.25);border-radius:8px;padding:12px;margin:12px 0;letter-spacing:1px}
+.success .fwd-label{font-size:12px;color:var(--muted);margin-bottom:4px}
+.success p{font-size:13.5px;color:var(--text);line-height:1.6}
+.success .muted{color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a href="/" class="brand">
+    <svg width="28" height="28" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="#FF5C1A"/><path d="M12 14C12 12.9 12.9 12 14 12H22C23.1 12 24 12.9 24 14V20C24 21.1 23.1 22 22 22H18.5L15 25.5V22H14C12.9 22 12 21.1 12 20V14Z" fill="white"/></svg>
+    <span class="brand-text">CallLocally</span>
+  </a>
+
+  <div class="card" id="formCard">
+    <div class="h1">Start your 14-day free trial</div>
+    <div class="sub">Your own number, capturing every missed call. $29/month after the trial &mdash; cancel anytime.</div>
+
+    <div class="trust-strip">
+      <span class="trust-item"><b>&check;</b> Dedicated number</span>
+      <span class="trust-item"><b>&check;</b> Unlimited missed-call capture</span>
+      <span class="trust-item"><b>&check;</b> Cancel anytime</span>
+    </div>
+
+    <div class="form-err" id="formErr"></div>
+
+    <form id="signupForm" novalidate>
+      <div class="group">
+        <div class="group-label">You</div>
+        <div class="field">
+          <label class="field-label" for="name">Your name</label>
+          <input class="form-input" id="name" type="text" autocomplete="name" placeholder="Jordan Rivera">
+        </div>
+        <div class="field">
+          <label class="field-label" for="email">Email</label>
+          <input class="form-input" id="email" type="email" autocomplete="email" placeholder="you@business.com">
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-label">Your business</div>
+        <div class="field">
+          <label class="field-label" for="businessName">Business name</label>
+          <input class="form-input" id="businessName" type="text" autocomplete="organization" placeholder="Rivera Plumbing">
+        </div>
+        <div class="field">
+          <label class="field-label" for="businessPhone">Business phone <span class="opt">&mdash; the number customers already call</span></label>
+          <input class="form-input" id="businessPhone" type="tel" autocomplete="tel" placeholder="(714) 555-0182">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="field-label" for="trade">Trade <span class="opt">(optional)</span></label>
+            <select class="form-select" id="trade">
+              <option value="">Select&hellip;</option>
+              <option value="plumber">Plumber</option>
+              <option value="hvac">HVAC</option>
+              <option value="electrician">Electrician</option>
+              <option value="roofer">Roofer</option>
+              <option value="other">Other trade</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="carrier">Phone carrier</label>
+            <select class="form-select" id="carrier">
+              <option value="">Select&hellip;</option>
+              <option value="verizon">Verizon</option>
+              <option value="att">AT&amp;T</option>
+              <option value="tmobile">T-Mobile</option>
+              <option value="other">Other / not sure</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="timezone">Timezone</label>
+          <select class="form-select" id="timezone">
+            <option value="America/Los_Angeles">Pacific (PT)</option>
+            <option value="America/Denver">Mountain (MT)</option>
+            <option value="America/Chicago">Central (CT)</option>
+            <option value="America/New_York">Eastern (ET)</option>
+            <option value="America/Phoenix">Arizona (no DST)</option>
+            <option value="America/Anchorage">Alaska (AKT)</option>
+            <option value="Pacific/Honolulu">Hawaii (HT)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-label">Payment</div>
+        <div class="field">
+          <label class="field-label">Card details</label>
+          <div class="card-box" id="card-box">
+            <div id="card-element"></div>
+          </div>
+          <div class="card-err" id="card-errors" role="alert"></div>
+          <div class="card-note">Card required to start the trial. You won't be charged until day 15 &mdash; cancel anytime before then and you pay nothing.</div>
+        </div>
+      </div>
+
+      <div class="consent">
+        <input type="checkbox" id="smsConsent">
+        <label for="smsConsent">I agree to receive account and setup text messages from CallLocally at the business number above. Message and data rates may apply. Reply STOP to opt out. See our <a href="/privacy" target="_blank">Privacy Policy</a> and <a href="/terms" target="_blank">Terms</a>.</label>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">Start free trial</button>
+      <div class="submit-note" id="submitNote">Setting up your dedicated number takes a few seconds.</div>
+    </form>
+
+    <div class="foot">
+      Already have an account? <a href="/login">Log in</a>
+    </div>
+  </div>
+
+  <div class="card success" id="successCard">
+    <div class="check">&check;</div>
+    <h2>You're all set!</h2>
+    <p>Your dedicated CallLocally number:</p>
+    <div class="num" id="successNumber">&mdash;</div>
+    <p style="margin-top:18px">To finish setup, dial this code from your business phone:</p>
+    <div class="fwd-label" id="successCarrier"></div>
+    <div class="fwd" id="successFwdCode">&mdash;</div>
+    <p class="muted" id="successFwdNote"></p>
+    <p style="margin-top:16px">We've also texted and emailed these setup steps to you.</p>
+    <a href="#" id="successBtn" class="submit-btn" style="display:inline-block;text-align:center;text-decoration:none;margin-top:18px;max-width:280px">Go to your dashboard</a>
+  </div>
+
+  <div class="foot" style="margin-top:24px">
+    &copy; CallLocally &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
+  </div>
+</div>
+
+<script>
+(function () {
+  var stripe = null;
+  var cardElement = null;
+  var submitting = false;
+
+  var form = document.getElementById('signupForm');
+  var submitBtn = document.getElementById('submitBtn');
+  var submitNote = document.getElementById('submitNote');
+  var formErr = document.getElementById('formErr');
+  var cardBox = document.getElementById('card-box');
+  var cardErrors = document.getElementById('card-errors');
+
+  function showError(msg) {
+    formErr.textContent = msg;
+    formErr.style.display = 'block';
+    formErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function hideError() {
+    formErr.style.display = 'none';
+    formErr.textContent = '';
+  }
+  function setLoading(on) {
+    submitting = on;
+    submitBtn.disabled = on;
+    submitBtn.textContent = on ? 'Setting up your number\u2026' : 'Start free trial';
+    submitNote.textContent = on
+      ? "This can take a few seconds \u2014 don't close this page."
+      : 'Setting up your dedicated number takes a few seconds.';
+  }
+
+  // ---- Initialise Stripe Elements ----
+  function initStripe() {
+    fetch('/api/config')
+      .then(function (r) { return r.json(); })
+      .then(function (cfg) {
+        if (!cfg || !cfg.stripePublishableKey) {
+          throw new Error('no-key');
+        }
+        stripe = Stripe(cfg.stripePublishableKey);
+        var elements = stripe.elements();
+        cardElement = elements.create('card', {
+          style: {
+            base: {
+              color: '#E2DFD8',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '15px',
+              '::placeholder': { color: '#7A8090' },
+              iconColor: '#7A8090'
+            },
+            invalid: { color: '#FCA5A5', iconColor: '#FCA5A5' }
+          }
+        });
+        cardElement.mount('#card-element');
+        cardElement.on('focus', function () { cardBox.classList.add('focused'); });
+        cardElement.on('blur', function () { cardBox.classList.remove('focused'); });
+        cardElement.on('change', function (event) {
+          if (event.error) {
+            cardErrors.textContent = event.error.message;
+            cardBox.classList.add('invalid');
+          } else {
+            cardErrors.textContent = '';
+            cardBox.classList.remove('invalid');
+          }
+        });
+      })
+      .catch(function () {
+        submitBtn.disabled = true;
+        showError("Signup is temporarily unavailable \u2014 we couldn't load the payment form. Please refresh, or email hello@calllocally.com and we'll get you set up.");
+      });
+  }
+
+  // ---- Validation ----
+  function digits(s) { return (s || '').replace(/\D/g, ''); }
+
+  function validate(vals) {
+    if (!vals.name) return 'Enter your name.';
+    if (!vals.email || !/^\S+@\S+\.\S+$/.test(vals.email)) return 'Enter a valid email address.';
+    if (!vals.businessName) return 'Enter your business name.';
+    if (digits(vals.businessPhone).length < 10) return 'Enter a valid business phone number.';
+    if (!vals.carrier) return 'Select your phone carrier so we can give you the right forwarding code.';
+    if (!vals.smsConsent) return 'Please agree to receive setup text messages \u2014 we need this to send you your forwarding code.';
+    return null;
+  }
+
+  function readForm() {
+    return {
+      name: document.getElementById('name').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      businessName: document.getElementById('businessName').value.trim(),
+      businessPhone: document.getElementById('businessPhone').value.trim(),
+      trade: document.getElementById('trade').value || null,
+      carrier: document.getElementById('carrier').value || null,
+      timezone: document.getElementById('timezone').value || 'America/Los_Angeles',
+      smsConsent: document.getElementById('smsConsent').checked
+    };
+  }
+
+  // ---- Success ----
+  function showSuccess(data) {
+    document.getElementById('successNumber').textContent = data.twilioNumber || '\u2014';
+    document.getElementById('successCarrier').textContent = data.carrier ? '(' + data.carrier + ')' : '';
+    document.getElementById('successFwdCode').textContent = data.forwardingCode || '\u2014';
+    document.getElementById('successFwdNote').textContent = data.forwardingNote || '';
+    var btn = document.getElementById('successBtn');
+    btn.href = data.authToken ? '/dashboard?token=' + encodeURIComponent(data.authToken) : '/dashboard';
+    document.getElementById('formCard').style.display = 'none';
+    document.getElementById('successCard').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ---- Submit ----
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (submitting) return;
+    hideError();
+
+    if (!stripe || !cardElement) {
+      showError('The payment form is still loading. Give it a moment and try again.');
+      return;
+    }
+
+    var vals = readForm();
+    var problem = validate(vals);
+    if (problem) { showError(problem); return; }
+
+    setLoading(true);
+
+    stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement,
+      billing_details: { name: vals.name, email: vals.email }
+    }).then(function (result) {
+      if (result.error) {
+        cardErrors.textContent = result.error.message;
+        cardBox.classList.add('invalid');
+        showError(result.error.message || 'There was a problem with your card. Please check the details.');
+        setLoading(false);
+        return;
+      }
+
+      var payload = {
+        name: vals.name,
+        email: vals.email,
+        businessName: vals.businessName,
+        businessPhone: vals.businessPhone,
+        trade: vals.trade,
+        carrier: vals.carrier,
+        timezone: vals.timezone,
+        smsConsent: true,
+        paymentMethodId: result.paymentMethod.id
+      };
+
+      fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          var msg = (res.data && res.data.error) || 'Something went wrong. Please try again.';
+          if (res.status === 409) {
+            msg = (res.data && res.data.error) || 'An account with this email already exists.';
+            showError(msg + ' You can log in instead.');
+          } else {
+            showError(msg);
+          }
+          setLoading(false);
+          return;
+        }
+        showSuccess(res.data);
+      }).catch(function () {
+        showError("Could not reach the server. Check your connection and try again \u2014 your card has not been charged.");
+        setLoading(false);
+      });
+    }).catch(function () {
+      showError('There was a problem processing your card. Please try again.');
+      setLoading(false);
+    });
+  });
+
+  initStripe();
+})();
+</script>
+</body>
+</html>
