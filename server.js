@@ -112,10 +112,7 @@ async function initDb() {
       twilio_number                 TEXT UNIQUE,
       twilio_number_sid             TEXT,
       custom_message                TEXT,
-      after_hours_message           TEXT,
-      business_hours                JSONB,
       timezone                      TEXT,
-      team_phones                   JSONB,
       created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       trial_ends_at                 TIMESTAMPTZ,
       plan                          TEXT NOT NULL DEFAULT 'standard',
@@ -125,7 +122,6 @@ async function initDb() {
       subscription_status_updated_at TIMESTAMPTZ,
       last_trial_notification       INT,
       total_leads                   INT NOT NULL DEFAULT 0,
-      total_urgent                  INT NOT NULL DEFAULT 0,
       carrier                       TEXT,
       reclaimed_at                  TIMESTAMPTZ,
       sms_consent                   BOOLEAN NOT NULL DEFAULT FALSE,
@@ -154,16 +150,12 @@ async function initDb() {
       caller_phone        TEXT NOT NULL,
       status              TEXT NOT NULL DEFAULT 'consent_pending',
       service             TEXT,
-      address             TEXT,
-      urgent              BOOLEAN NOT NULL DEFAULT FALSE,
-      after_hours         BOOLEAN NOT NULL DEFAULT FALSE,
       conversation        JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       consent_granted_at  TIMESTAMPTZ,
       captured_at         TIMESTAMPTZ,
       opted_out_at        TIMESTAMPTZ,
-      contractor_notified BOOLEAN NOT NULL DEFAULT FALSE,
-      sent_from           TEXT
+      contractor_notified BOOLEAN NOT NULL DEFAULT FALSE
     );
   `);
 
@@ -400,15 +392,28 @@ function defaultCustomMessage(businessName) {
 }
 
 function detailsPromptMessage(businessName) {
-  return `Thanks! What's the service you need and your address? We'll get ${businessName} on it.`;
+  return `Thanks! What do you need help with? We'll get ${businessName} on it.`;
 }
 
 function callerConfirmMessage(businessName) {
   return `Got it! ${businessName} has been notified and will be in touch shortly.`;
 }
 
-function contractorLeadSms(callerPhone, callerMessage) {
-  return `📬 New lead from ${callerPhone}: "${callerMessage}". Reply to this number to reach them.`;
+function contractorLeadSms(callerPhone, serviceNeed, reachedOutAt) {
+  const when = reachedOutAt
+    ? new Date(reachedOutAt).toLocaleString('en-US', {
+        timeZone: 'America/Los_Angeles',
+        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : 'just now';
+  return [
+    '📬 New CallLocally lead',
+    `From: ${callerPhone}`,
+    `Called: ${when}`,
+    `They need: "${serviceNeed}"`,
+    '',
+    'Reply to this text to reach them directly.',
+  ].join('\n');
 }
 
 // ============================================================
@@ -600,15 +605,15 @@ app.post('/api/signup', async (req, res) => {
     await pool.query(
       `INSERT INTO users
         (id, auth_token, name, email, business_name, business_phone, trade,
-         twilio_number, twilio_number_sid, custom_message, after_hours_message,
+         twilio_number, twilio_number_sid, custom_message,
          timezone, trial_ends_at, plan, stripe_customer_id, stripe_subscription_id,
          subscription_status, subscription_status_updated_at, carrier,
          sms_consent, sms_consent_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'standard',$14,$15,$16,NOW(),$17,TRUE,NOW())`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'standard',$13,$14,$15,NOW(),$16,TRUE,NOW())`,
       [
         userId, authToken, name, email.toLowerCase(), businessName, normalizedBusinessPhone, trade || null,
         phoneNumber, phoneNumberSid,
-        defaultCustomMessage(businessName), defaultCustomMessage(businessName),
+        defaultCustomMessage(businessName),
         timezone || 'America/Los_Angeles', trialEndsAt,
         customer.id, subscription.id, subscription.status,
         (carrier || '').toLowerCase() || null,
@@ -630,6 +635,18 @@ app.post('/api/signup', async (req, res) => {
         <p><a href="${BASE_URL}/dashboard?token=${authToken}">Open your dashboard →</a></p>
       `,
     });
+
+    // ---- Setup SMS to the contractor (their audience lives on text, not email) ----
+    try {
+      await smsCreate(
+        normalizedBusinessPhone,
+        `Welcome to CallLocally, ${name}! Your number is live: ${phoneNumber}. ` +
+        `To finish setup, dial ${fwd.code} from this phone (${fwd.name}). ${fwd.note} ` +
+        `Dashboard: ${BASE_URL}/dashboard?token=${authToken}`
+      );
+    } catch (e) {
+      log.error('setup SMS failed', e.message);
+    }
 
     res.json({
       ok: true,
@@ -703,7 +720,7 @@ app.post('/api/consume-login', async (req, res) => {
 // ============================================================
 // TWILIO VOICE WEBHOOK CHAIN — inbound forwarded call
 // ============================================================
-// /api/forward → tries to ring contractor's existing phones (team_phones if set)
+// /api/forward → the carrier already determined this call was unanswered, so we go
 // /api/dial-complete → if no answer, kicks off the SMS opt-in flow to the caller
 // /api/voicemail → optional voicemail recording
 // /api/call-status → analytics callbacks
@@ -940,20 +957,24 @@ app.post('/api/twilio/sms', twilioWebhookLimiter, validateTwilio, async (req, re
 
       // Notify contractor: SMS + email
       try {
-        const contractorSms = contractorLeadSms(fromNumber, body.slice(0, 400));
+        const contractorSms = contractorLeadSms(fromNumber, body.slice(0, 400), lead.created_at);
         await smsCreate(businessPhoneNormalized, contractorSms);
       } catch (e) { log.error('contractor sms notify failed', e.message); }
 
       try {
+        const calledAt = new Date(lead.created_at).toLocaleString('en-US', {
+          timeZone: user.timezone || 'America/Los_Angeles',
+        });
         await sendEmail({
           to: user.email,
           subject: `📬 New lead from ${fromNumber}`,
           html: `
             <h3>New lead captured</h3>
             <p><strong>From:</strong> ${fromNumber}</p>
-            <p><strong>Message:</strong></p>
+            <p><strong>Called:</strong> ${calledAt}</p>
+            <p><strong>What they need:</strong></p>
             <blockquote style="border-left:3px solid #FF5C1A;padding-left:12px">${escapeXml(body)}</blockquote>
-            <p><a href="${BASE_URL}/dashboard?token=${user.auth_token}">View in dashboard →</a></p>
+            <p><a href="${BASE_URL}/dashboard?token=${user.auth_token}">View the full conversation in your dashboard →</a></p>
           `,
         });
       } catch (e) { log.error('contractor email notify failed', e.message); }
@@ -992,15 +1013,11 @@ app.get('/api/me', requireAuth, async (req, res) => {
     trade: u.trade,
     twilioNumber: u.twilio_number,
     customMessage: u.custom_message,
-    afterHoursMessage: u.after_hours_message,
-    businessHours: u.business_hours,
     timezone: u.timezone,
-    teamPhones: u.team_phones,
     plan: u.plan,
     subscriptionStatus: u.subscription_status,
     trialEndsAt: u.trial_ends_at,
     totalLeads: u.total_leads,
-    totalUrgent: u.total_urgent,
     carrier: u.carrier,
     forwarding: { code: fwd.code, name: fwd.name, note: fwd.note },
     serviceActive: isServiceActive(u),
@@ -1010,8 +1027,8 @@ app.get('/api/me', requireAuth, async (req, res) => {
 app.get('/api/leads', requireAuth, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const { rows } = await pool.query(
-    `SELECT id, caller_phone, status, service, address, urgent,
-            after_hours, conversation, created_at, captured_at
+    `SELECT id, caller_phone, status, service,
+            conversation, created_at, captured_at
        FROM leads
       WHERE user_id = $1
       ORDER BY created_at DESC
@@ -1037,17 +1054,14 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 });
 
 app.post('/api/update-settings', requireAuth, async (req, res) => {
-  const allowed = ['customMessage', 'afterHoursMessage', 'businessHours', 'timezone', 'teamPhones', 'carrier'];
+  const allowed = ['customMessage', 'timezone', 'carrier'];
   const updates = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   if (!Object.keys(updates).length) return res.json({ ok: true, updated: 0 });
 
   const colMap = {
     customMessage: 'custom_message',
-    afterHoursMessage: 'after_hours_message',
-    businessHours: 'business_hours',
     timezone: 'timezone',
-    teamPhones: 'team_phones',
     carrier: 'carrier',
   };
   const setClauses = [];
@@ -1055,7 +1069,7 @@ app.post('/api/update-settings', requireAuth, async (req, res) => {
   let i = 1;
   for (const [k, v] of Object.entries(updates)) {
     setClauses.push(`${colMap[k]} = $${i++}`);
-    params.push(['businessHours','teamPhones'].includes(k) ? JSON.stringify(v) : v);
+    params.push(v);
   }
   params.push(req.user.id);
   await pool.query(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $${i}`, params);
