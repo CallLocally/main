@@ -575,6 +575,8 @@
       .features { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
+      .hero__caption { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .hero__caption .dot { display: none; }
       body { font-size: 16px; }
       .wrap { padding: 0 22px; }
       .header__inner { padding: 16px 22px; }
@@ -626,11 +628,11 @@
         it straight to your phone while you keep working.
       </p>
       <p class="hero__caption">
-        Your existing number
+        <span class="hero__caption-item">Your existing number</span>
         <span class="dot">·</span>
-        Verified in 1–3 days
+        <span class="hero__caption-item">Verified in 1–3 days</span>
         <span class="dot">·</span>
-        Live in 5 minutes
+        <span class="hero__caption-item">Live in 5 minutes</span>
       </p>
       <div class="hero__ctas">
         <a class="btn btn--primary btn--large" href="/signup">Start 14-day free trial</a>
@@ -895,7 +897,7 @@
   <footer class="site">
     <div class="wrap">
       <div class="footer__row">
-        <div class="brand">CallLocally</div>
+        <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" height="28" role="img" aria-label="CallLocally"><text x="200" y="60" text-anchor="middle" font-size="56" font-weight="900" font-family="'Arial Black','Helvetica Neue',sans-serif" letter-spacing="-1.5"><tspan fill="var(--ink)">Call</tspan><tspan fill="var(--accent)">Locally</tspan></text></svg></div>
         <nav class="footer__links">
           <a href="/dashboard">Dashboard</a>
           <a href="mailto:hello@calllocally.com">hello@calllocally.com</a>
